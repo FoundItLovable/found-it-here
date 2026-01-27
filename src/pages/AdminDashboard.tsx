@@ -29,12 +29,11 @@ export default function AdminDashboard() {
   const [showDetails, setShowDetails] = useState(false);
   const { toast } = useToast();
 
-  const currentOffice = mockOffices[0]; // Simulating logged-in admin's office
+  const currentOffice = mockOffices[0];
 
   const filteredItems = useMemo(() => {
     let result = items.filter(item => item.officeId === currentOffice.id);
 
-    // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
@@ -44,17 +43,14 @@ export default function AdminDashboard() {
       );
     }
 
-    // Category filter
     if (categoryFilter !== 'all') {
       result = result.filter(item => item.category === categoryFilter);
     }
 
-    // Status filter
     if (statusFilter !== 'all') {
       result = result.filter(item => item.status === statusFilter);
     }
 
-    // Sort
     result.sort((a, b) => {
       switch (sortBy) {
         case 'newest':
@@ -141,13 +137,13 @@ export default function AdminDashboard() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link to="/">
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" className="hover:bg-secondary">
                 <ArrowLeft className="w-5 h-5" />
               </Button>
             </Link>
             <Logo size="sm" />
-            <Badge variant="secondary" className="hidden sm:flex">
-              Admin Dashboard
+            <Badge variant="outline" className="hidden sm:flex text-xs">
+              Admin
             </Badge>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -158,27 +154,27 @@ export default function AdminDashboard() {
       </header>
 
       {/* Stats Banner */}
-      <section className="border-b border-border/50 bg-muted/30">
+      <section className="border-b border-border/50 bg-muted/20">
         <div className="container mx-auto px-4 py-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="border-0 shadow-none bg-transparent">
               <CardContent className="p-3 flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Package className="w-5 h-5 text-primary" />
+                <div className="p-2 rounded-lg bg-foreground">
+                  <Package className="w-4 h-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{stats.total}</p>
-                  <p className="text-xs text-muted-foreground">Total Items</p>
+                  <p className="text-2xl font-bold text-foreground">{stats.total}</p>
+                  <p className="text-xs text-muted-foreground">Total</p>
                 </div>
               </CardContent>
             </Card>
             <Card className="border-0 shadow-none bg-transparent">
               <CardContent className="p-3 flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-success/10">
-                  <Clock className="w-5 h-5 text-success" />
+                <div className="p-2 rounded-lg bg-primary/15">
+                  <Clock className="w-4 h-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{stats.available}</p>
+                  <p className="text-2xl font-bold text-foreground">{stats.available}</p>
                   <p className="text-xs text-muted-foreground">Available</p>
                 </div>
               </CardContent>
@@ -186,21 +182,21 @@ export default function AdminDashboard() {
             <Card className="border-0 shadow-none bg-transparent">
               <CardContent className="p-3 flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-muted">
-                  <CheckCircle className="w-5 h-5 text-muted-foreground" />
+                  <CheckCircle className="w-4 h-4 text-muted-foreground" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{stats.claimed}</p>
+                  <p className="text-2xl font-bold text-foreground">{stats.claimed}</p>
                   <p className="text-xs text-muted-foreground">Claimed</p>
                 </div>
               </CardContent>
             </Card>
             <Card className="border-0 shadow-none bg-transparent">
               <CardContent className="p-3 flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-destructive/10">
-                  <XCircle className="w-5 h-5 text-destructive" />
+                <div className="p-2 rounded-lg bg-destructive/15">
+                  <XCircle className="w-4 h-4 text-destructive" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{stats.cancelled}</p>
+                  <p className="text-2xl font-bold text-foreground">{stats.cancelled}</p>
                   <p className="text-xs text-muted-foreground">Cancelled</p>
                 </div>
               </CardContent>
@@ -212,12 +208,12 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="inventory" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
-            <TabsTrigger value="inventory" className="flex items-center gap-2">
+          <TabsList className="grid w-full max-w-sm grid-cols-2 bg-muted/50">
+            <TabsTrigger value="inventory" className="flex items-center gap-2 data-[state=active]:bg-background">
               <Grid3X3 className="w-4 h-4" />
               Inventory
             </TabsTrigger>
-            <TabsTrigger value="add" className="flex items-center gap-2">
+            <TabsTrigger value="add" className="flex items-center gap-2 data-[state=active]:bg-background">
               <Plus className="w-4 h-4" />
               Add Item
             </TabsTrigger>
@@ -225,19 +221,19 @@ export default function AdminDashboard() {
 
           <TabsContent value="inventory" className="space-y-6">
             {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   placeholder="Search items..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 bg-background"
+                  className="pl-9 bg-background border-border/50"
                 />
               </div>
               <div className="flex gap-2">
                 <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                  <SelectTrigger className="w-[140px] bg-background">
+                  <SelectTrigger className="w-[140px] bg-background border-border/50">
                     <ListFilter className="w-4 h-4 mr-2" />
                     <SelectValue placeholder="Category" />
                   </SelectTrigger>
@@ -249,7 +245,7 @@ export default function AdminDashboard() {
                   </SelectContent>
                 </Select>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-[130px] bg-background">
+                  <SelectTrigger className="w-[120px] bg-background border-border/50">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -260,7 +256,7 @@ export default function AdminDashboard() {
                   </SelectContent>
                 </Select>
                 <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger className="w-[120px] bg-background">
+                  <SelectTrigger className="w-[110px] bg-background border-border/50">
                     <SelectValue placeholder="Sort" />
                   </SelectTrigger>
                   <SelectContent>
@@ -287,10 +283,10 @@ export default function AdminDashboard() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12 bg-muted/30 rounded-xl">
-                <Package className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                <h3 className="font-display font-semibold text-lg mb-2">No items found</h3>
-                <p className="text-muted-foreground">
+              <div className="text-center py-16 bg-muted/20 rounded-xl border border-dashed border-border">
+                <Package className="w-12 h-12 mx-auto text-muted-foreground/40 mb-4" />
+                <h3 className="font-display font-semibold text-lg mb-2 text-foreground">No items found</h3>
+                <p className="text-muted-foreground text-sm">
                   {searchQuery || categoryFilter !== 'all' || statusFilter !== 'all'
                     ? 'Try adjusting your filters.'
                     : 'Add your first item to get started.'}
@@ -325,7 +321,7 @@ export default function AdminDashboard() {
                   />
                 )}
                 <div className="space-y-3">
-                  <p className="text-sm">{selectedItem.description}</p>
+                  <p className="text-sm text-foreground">{selectedItem.description}</p>
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Calendar className="w-4 h-4" />
@@ -340,7 +336,7 @@ export default function AdminDashboard() {
                 <div className="flex gap-2 pt-4">
                   {selectedItem.status === 'available' && (
                     <>
-                      <Button variant="success" className="flex-1" onClick={() => {
+                      <Button className="flex-1" onClick={() => {
                         handleClose(selectedItem);
                         setShowDetails(false);
                       }}>
