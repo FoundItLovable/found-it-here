@@ -52,11 +52,11 @@ export function UploadItemForm({ onSubmit }: UploadItemFormProps) {
   };
 
   return (
-    <Card className="border-border/50">
+    <Card className="border-border/50 bg-card">
       <CardHeader className="pb-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg gradient-hero">
-            <Plus className="w-5 h-5 text-primary-foreground" />
+          <div className="p-2.5 rounded-lg bg-foreground">
+            <Plus className="w-5 h-5 text-primary" />
           </div>
           <div>
             <CardTitle className="font-display text-lg">Add Found Item</CardTitle>
@@ -70,8 +70,8 @@ export function UploadItemForm({ onSubmit }: UploadItemFormProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Image Upload Placeholder */}
           <div className="space-y-2">
-            <Label>Item Photo</Label>
-            <div className="border-2 border-dashed border-border rounded-xl p-6 text-center hover:border-primary/50 transition-colors cursor-pointer bg-muted/30">
+            <Label className="text-sm font-medium">Item Photo</Label>
+            <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors cursor-pointer bg-muted/20">
               <Camera className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
               <p className="text-sm text-muted-foreground">
                 Click to upload or drag and drop
@@ -83,20 +83,20 @@ export function UploadItemForm({ onSubmit }: UploadItemFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="name">Item Name *</Label>
+            <Label htmlFor="name" className="text-sm font-medium">Item Name *</Label>
             <Input
               id="name"
               placeholder="e.g., Black iPhone with blue case"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="bg-background"
+              className="bg-background border-border/50"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="category">Category</Label>
+            <Label htmlFor="category" className="text-sm font-medium">Category</Label>
             <Select value={category} onValueChange={(v) => setCategory(v as ItemCategory)}>
-              <SelectTrigger className="bg-background">
+              <SelectTrigger className="bg-background border-border/50">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -110,30 +110,30 @@ export function UploadItemForm({ onSubmit }: UploadItemFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Description *</Label>
+            <Label htmlFor="description" className="text-sm font-medium">Description *</Label>
             <Textarea
               id="description"
               placeholder="Describe the item in detail - color, brand, condition, any identifying features..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="bg-background resize-none"
+              className="bg-background border-border/50 resize-none"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="imageUrl">Image URL (optional)</Label>
+            <Label htmlFor="imageUrl" className="text-sm font-medium">Image URL (optional)</Label>
             <Input
               id="imageUrl"
               placeholder="https://..."
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
-              className="bg-background"
+              className="bg-background border-border/50"
             />
           </div>
 
-          <Button type="submit" variant="hero" size="lg" className="w-full">
-            <Upload className="w-5 h-5" />
+          <Button type="submit" size="lg" className="w-full">
+            <Upload className="w-4 h-4" />
             Add to Inventory
           </Button>
         </form>
