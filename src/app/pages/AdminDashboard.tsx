@@ -32,6 +32,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { FoundItem, ItemFormData } from "@/types";
 import { categoryLabels } from "@/types";
 
+
+
 function safeDateOnly(value?: string | null) {
   if (!value) return new Date().toISOString().slice(0, 10);
   return String(value).slice(0, 10);
@@ -181,7 +183,39 @@ export default function AdminDashboard() {
   }, [items, searchQuery, categoryFilter, statusFilter, sortBy]);
 
   async function handleCreate(data: ItemFormData) {
+    // Fetch the model's reply (plain text) before creating the item.
+    async function fetchGeminiText(): Promise<string | null> {
+      try {
+        const res = await fetch("/api/gemini");
+        if (!res.ok) return null;
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const body = await res.json();
+          if (typeof body === "string") return body;
+          if (body?.ok && typeof body?.response === "string") return body.response;
+          const nested =
+            (body?.response?.candidates?.[0]?.content?.parts?.[0]?.text) ||
+            (body?.candidates?.[0]?.content?.parts?.[0]?.text) ||
+            null;
+          if (nested) return nested;
+          return JSON.stringify(body);
+        }
+        const text = await res.text();
+        return text.trim().length ? text : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
     try {
+      const geminiText = await fetchGeminiText();
+      if (!geminiText) {
+        toast({ title: "Generative API unavailable", description: "Status check failed — creating item anyway." });
+      } else {
+        toast({ title: "Generative API available", description: "Status check successful." });
+      }
+      console.log("Gemini status check response:", geminiText);
+
       // Your DB expects found_items columns (item_name, found_location, etc.)
       const createdRow = await createFoundItem({
         item_name: data.name,
@@ -200,6 +234,11 @@ export default function AdminDashboard() {
 
       setItems((prev) => [created, ...prev]);
       toast({ title: "Item added", description: "New found item created." });
+
+      // Show the model reply to the user if available
+      if (geminiText) {
+        toast({ title: "AI reply", description: geminiText });
+      }
     } catch (err: any) {
       console.error(err);
       toast({
