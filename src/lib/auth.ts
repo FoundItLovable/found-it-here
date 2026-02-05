@@ -65,3 +65,43 @@ export const signOut = async () => {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 };
+
+export interface SignUpData {
+  email: string;
+  password: string;
+  fullName: string;
+  phoneNumber?: string;
+  studentId?: string;
+}
+
+export const signUp = async (data: SignUpData) => {
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email: data.email,
+    password: data.password,
+    options: {
+      data: {
+        full_name: data.fullName,
+        phone_number: data.phoneNumber || null,
+        student_id: data.studentId || null,
+      },
+    },
+  });
+
+  console.log("Signup response:", { authData, authError });
+
+  if (authError) {
+    throw new Error(authError.message);
+  }
+
+  if (!authData.user) {
+    throw new Error("Failed to create user");
+  }
+
+  // Check if this is an existing user (no new session created)
+  // Supabase returns identities as empty array for existing unconfirmed users
+  if (authData.user.identities?.length === 0) {
+    throw new Error("An account with this email already exists");
+  }
+
+  return authData;
+};
