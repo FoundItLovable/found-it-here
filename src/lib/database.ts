@@ -706,3 +706,26 @@ const calculateKeywordSimilarity = (desc1: string, desc2: string): number => {
   const common = keywords1.filter((w) => set2.has(w));
   return common.length / Math.max(keywords1.length, keywords2.length);
 };
+
+// --------------------------------------------
+// IMAGE UPLOAD
+// --------------------------------------------
+
+export const uploadImage = async (file: File): Promise<string> => {
+  const { data: auth } = await supabase.auth.getUser();
+  const user = auth.user;
+  if (!user) throw new Error("Not authenticated");
+
+  const fileExt = file.name.split(".").pop();
+  const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("item-images")
+    .upload(fileName, file);
+
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage.from("item-images").getPublicUrl(fileName);
+
+  return data.publicUrl;
+};

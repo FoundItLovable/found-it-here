@@ -45,12 +45,13 @@ function officeLocation(profile: any): string {
 }
 
 function rowToFoundItem(row: any, profile: any): FoundItem {
+  const status = row?.status as FoundItem['status'] ?? 'available';
   return {
     id: String(row?.id),
     name: String(row?.item_name ?? "Unnamed item"),
     description: String(row?.description ?? ""),
     category: row?.category,
-    status: row?.status === "returned" ? "returned" : "available",
+    status,
     imageUrl: row?.image_url ?? undefined,
     dateFound: safeDateOnly(row?.found_date ?? row?.created_at),
     officeId: String(profile?.office_id ?? ""),
@@ -59,7 +60,9 @@ function rowToFoundItem(row: any, profile: any): FoundItem {
     checkedInBy: String(profile?.full_name ?? ""),
     createdAt: String(row?.created_at ?? new Date().toISOString()),
     updatedAt: String(row?.updated_at ?? row?.created_at ?? new Date().toISOString()),
-  } as FoundItem;
+    color: row?.color ?? undefined,
+    brand: row?.brand ?? undefined,
+  };
 }
 
 export default function AdminDashboard() {
@@ -67,7 +70,6 @@ export default function AdminDashboard() {
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<FoundItem[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
   const [currentOffice, setCurrentOffice] = useState({ name: "" });
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -127,8 +129,9 @@ export default function AdminDashboard() {
   const stats = useMemo(() => {
     const total = items.length;
     const available = items.filter((i) => i.status === "available").length;
+    const claimed = items.filter((i) => i.status === "claimed").length;
     const returned = items.filter((i) => i.status === "returned").length;
-    return { total, available, returned };
+    return { total, available, claimed, returned };
   }, [items]);
 
   const filteredItems = useMemo(() => {
@@ -308,7 +311,7 @@ export default function AdminDashboard() {
       {/* Stats Banner */}
       <section className="border-b border-border/50 bg-muted/20">
         <div className="container mx-auto px-4 py-4">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <Card className="border-0 shadow-none bg-transparent">
               <CardContent className="p-3 flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-foreground">
@@ -328,6 +331,17 @@ export default function AdminDashboard() {
                 <div>
                   <p className="text-2xl font-bold text-foreground">{stats.available}</p>
                   <p className="text-xs text-muted-foreground">Available</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-0 shadow-none bg-transparent">
+              <CardContent className="p-3 flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-yellow-500/15">
+                  <User className="w-4 h-4 text-yellow-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{stats.claimed}</p>
+                  <p className="text-xs text-muted-foreground">Claimed</p>
                 </div>
               </CardContent>
             </Card>
@@ -392,6 +406,7 @@ export default function AdminDashboard() {
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="available">Available</SelectItem>
+                    <SelectItem value="claimed">Claimed</SelectItem>
                     <SelectItem value="returned">Returned</SelectItem>
                   </SelectContent>
                 </Select>

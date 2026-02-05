@@ -18,12 +18,15 @@ export interface FoundItem {
   category: ItemCategory;
   dateFound: string;
   imageUrl?: string;
-  status: 'available' | 'returned';
+  status: 'available' | 'claimed' | 'returned';
   officeId: string;
   officeName: string;
   officeLocation: string;
   checkedInBy: string;
   createdAt: string;
+  updatedAt?: string;
+  color?: string;
+  brand?: string;
 }
 
 export interface ItemFormData {
