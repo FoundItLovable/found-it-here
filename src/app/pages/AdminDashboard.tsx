@@ -15,8 +15,8 @@ import { AdminItemCard } from "@/components/admin/AdminItemCard";
 import { UploadItemForm } from "@/components/admin/UploadItemForm";
 import { toast } from "@/hooks/use-toast";
 
-import { 
-  Search, Package, Plus, ArrowLeft, Grid3X3, 
+import {
+  Search, Package, Plus, ArrowLeft, Grid3X3,
   ListFilter, CheckCircle, XCircle, Clock,
   MapPin, Calendar, User
 } from 'lucide-react';
@@ -94,7 +94,7 @@ export default function AdminDashboard() {
         const ok = await isStaff();
         if (!ok) {
           await signOut();
-          navigate("/Logins");
+          navigate("/Login");
           return;
         }
 
@@ -284,28 +284,28 @@ export default function AdminDashboard() {
     setSelectedItem(item);
     setShowDetails(true);
   };
-  const handleEdit = () => {}; // Placeholder
+  const handleEdit = () => { }; // Placeholder
   const handleClose = handleReturn;
   const handleCancel = handleDelete;
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link to="/">
-              <Button variant="ghost" size="icon" className="hover:bg-secondary">
-                <ArrowLeft className="w-5 h-5" />
-              </Button>
-            </Link>
-            <Logo size="sm" />
-            <Badge variant="outline" className="hidden sm:flex text-xs">
-              Admin
-            </Badge>
+        <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
+          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link to="/">
+                <Button variant="ghost" size="icon" className="hover:bg-secondary">
+                  <ArrowLeft className="w-5 h-5" />
+                </Button>
+              </Link>
+              <Logo size="sm" />
+              <Badge variant="outline" className="hidden sm:flex text-xs">
+                Admin
+              </Badge>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
       </div>
     );
   }
