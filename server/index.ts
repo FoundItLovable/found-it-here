@@ -5,7 +5,7 @@ import path from "path";
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local"), debug: true });
 
 import express from "express";
-import { geminiStatus } from "./gemini";
+import { geminiStatus, listModels, analyzeImage, analyzeImageFile } from "./gemini";
 
 // Process-level diagnostics to capture why the server may exit
 process.on("uncaughtException", (err) => {
@@ -65,6 +65,9 @@ app.use((req, _res, next) => {
   next();
 });
 
+// Parse JSON bodies for API endpoints (allow larger payloads for image base64)
+app.use(express.json({ limit: '16mb' }));
+
 app.get("/api/gemini", async (_req, res) => {
   try {
     const text = await geminiStatus();
@@ -81,7 +84,6 @@ app.get("/api/gemini", async (_req, res) => {
     }
   }
 });
-import { listModels } from "./gemini";
 
 // List available models (safe): returns model ids and display names
 app.get("/models", async (_req, res) => {
@@ -95,6 +97,36 @@ app.get("/models", async (_req, res) => {
   } catch (err) {
     console.error("listModels error:", err instanceof Error ? err.stack ?? err.message : err);
     res.status(500).send("Could not list models");
+  }
+});
+
+// Analyze an uploaded image via Gemini and return a parsed JSON object
+app.post("/api/gemini/analyze", async (req, res) => {
+  try {
+    const { imageUrl } = req.body ?? {};
+    if (!imageUrl || typeof imageUrl !== "string") {
+      return res.status(400).json({ error: "Missing required field: imageUrl" });
+    }
+    const result = await analyzeImage(imageUrl);
+    return res.json(result);
+  } catch (err: any) {
+    console.error("analyzeImage error:", err?.stack ?? err?.message ?? err);
+    return res.status(502).json({ error: "Model error", details: err?.message ?? String(err) });
+  }
+});
+
+// Analyze an uploaded file's bytes. Accepts JSON { filename, mimeType, base64 }
+app.post("/api/gemini/analyze-file", async (req, res) => {
+  try {
+    const { filename, mimeType, base64 } = req.body ?? {};
+    if (!base64 || !filename || !mimeType) {
+      return res.status(400).json({ error: "Missing required fields: filename, mimeType, base64" });
+    }
+    const result = await analyzeImageFile(base64, filename, mimeType);
+    return res.json(result);
+  } catch (err: any) {
+    console.error("analyzeImageFile error:", err?.stack ?? err?.message ?? err);
+    return res.status(502).json({ error: "Model error", details: err?.message ?? String(err) });
   }
 });
 

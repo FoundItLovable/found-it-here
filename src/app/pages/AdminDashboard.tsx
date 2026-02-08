@@ -12,7 +12,7 @@ import {
 
 import { Logo } from "@/components/Logo";
 import { AdminItemCard } from "@/components/admin/AdminItemCard";
-import { UploadItemForm } from "@/components/admin/UploadItemForm";
+import { AddItemModal } from "@/components/admin/AddItemModal";
 import { toast } from "@/hooks/use-toast";
 
 import {
@@ -47,12 +47,13 @@ function officeLocation(profile: any): string {
 }
 
 function rowToFoundItem(row: any, profile: any): FoundItem {
+  const status = row?.status as FoundItem['status'] ?? 'available';
   return {
     id: String(row?.id),
     name: String(row?.item_name ?? "Unnamed item"),
     description: String(row?.description ?? ""),
     category: row?.category,
-    status: row?.status === "returned" ? "returned" : "available",
+    status,
     imageUrl: row?.image_url ?? undefined,
     dateFound: safeDateOnly(row?.found_date ?? row?.created_at),
     officeId: String(profile?.office_id ?? ""),
@@ -61,7 +62,9 @@ function rowToFoundItem(row: any, profile: any): FoundItem {
     checkedInBy: String(profile?.full_name ?? ""),
     createdAt: String(row?.created_at ?? new Date().toISOString()),
     updatedAt: String(row?.updated_at ?? row?.created_at ?? new Date().toISOString()),
-  } as FoundItem;
+    color: row?.color ?? undefined,
+    brand: row?.brand ?? undefined,
+  };
 }
 
 export default function AdminDashboard() {
@@ -69,7 +72,6 @@ export default function AdminDashboard() {
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<FoundItem[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
   const [currentOffice, setCurrentOffice] = useState({ name: "" });
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -77,6 +79,7 @@ export default function AdminDashboard() {
   const [sortBy, setSortBy] = useState("newest");
   const [selectedItem, setSelectedItem] = useState<FoundItem | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -129,8 +132,9 @@ export default function AdminDashboard() {
   const stats = useMemo(() => {
     const total = items.length;
     const available = items.filter((i) => i.status === "available").length;
+    const claimed = items.filter((i) => i.status === "claimed").length;
     const returned = items.filter((i) => i.status === "returned").length;
-    return { total, available, returned };
+    return { total, available, claimed, returned };
   }, [items]);
 
   const filteredItems = useMemo(() => {
@@ -182,39 +186,8 @@ export default function AdminDashboard() {
     return filtered;
   }, [items, searchQuery, categoryFilter, statusFilter, sortBy]);
 
-  async function handleCreate(data: ItemFormData) {
-    // Fetch the model's reply (plain text) before creating the item.
-    async function fetchGeminiText(): Promise<string | null> {
-      try {
-        const res = await fetch("/api/gemini");
-        if (!res.ok) return null;
-        const contentType = res.headers.get("content-type") || "";
-        if (contentType.includes("application/json")) {
-          const body = await res.json();
-          if (typeof body === "string") return body;
-          if (body?.ok && typeof body?.response === "string") return body.response;
-          const nested =
-            (body?.response?.candidates?.[0]?.content?.parts?.[0]?.text) ||
-            (body?.candidates?.[0]?.content?.parts?.[0]?.text) ||
-            null;
-          if (nested) return nested;
-          return JSON.stringify(body);
-        }
-        const text = await res.text();
-        return text.trim().length ? text : null;
-      } catch (e) {
-        return null;
-      }
-    }
-
+  async function handleCreate(data: ItemFormData & { highValue?: boolean }) {
     try {
-      const geminiText = await fetchGeminiText();
-      if (!geminiText) {
-        toast({ title: "Generative API unavailable", description: "Status check failed — creating item anyway." });
-      } else {
-        toast({ title: "Generative API available", description: "Status check successful." });
-      }
-      console.log("Gemini status check response:", geminiText);
 
       // Your DB expects found_items columns (item_name, found_location, etc.)
       const createdRow = await createFoundItem({
@@ -226,6 +199,7 @@ export default function AdminDashboard() {
         found_date: data.foundDate ?? new Date().toISOString().slice(0, 10),
         brand: data.brand ?? null,
         color: data.color ?? null,
+        high_value: data.highValue ? true : false,
         status: "available",
       });
 
@@ -235,10 +209,6 @@ export default function AdminDashboard() {
       setItems((prev) => [created, ...prev]);
       toast({ title: "Item added", description: "New found item created." });
 
-      // Show the model reply to the user if available
-      if (geminiText) {
-        toast({ title: "AI reply", description: geminiText });
-      }
     } catch (err: any) {
       console.error(err);
       toast({
@@ -280,11 +250,13 @@ export default function AdminDashboard() {
   }
 
   const handleAddItem = handleCreate;
+  
+
   const handleView = (item: FoundItem) => {
     setSelectedItem(item);
     setShowDetails(true);
   };
-  const handleEdit = () => { }; // Placeholder
+  const handleEdit = () => {}; // Edit disabled for now
   const handleClose = handleReturn;
   const handleCancel = handleDelete;
 
@@ -347,7 +319,7 @@ export default function AdminDashboard() {
       {/* Stats Banner */}
       <section className="border-b border-border/50 bg-muted/20">
         <div className="container mx-auto px-4 py-4">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <Card className="border-0 shadow-none bg-transparent">
               <CardContent className="p-3 flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-foreground">
@@ -367,6 +339,17 @@ export default function AdminDashboard() {
                 <div>
                   <p className="text-2xl font-bold text-foreground">{stats.available}</p>
                   <p className="text-xs text-muted-foreground">Available</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-0 shadow-none bg-transparent">
+              <CardContent className="p-3 flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-yellow-500/15">
+                  <User className="w-4 h-4 text-yellow-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-foreground">{stats.claimed}</p>
+                  <p className="text-xs text-muted-foreground">Claimed</p>
                 </div>
               </CardContent>
             </Card>
@@ -393,10 +376,12 @@ export default function AdminDashboard() {
               <Grid3X3 className="w-4 h-4" />
               Inventory
             </TabsTrigger>
-            <TabsTrigger value="add" className="flex items-center gap-2 data-[state=active]:bg-background">
-              <Plus className="w-4 h-4" />
-              Add Item
-            </TabsTrigger>
+            <div className="flex items-center justify-center">
+              <Button variant="ghost" size="sm" onClick={() => setShowAddModal(true)} className="flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">Add Item</span>
+              </Button>
+            </div>
           </TabsList>
 
           <TabsContent value="inventory" className="space-y-6">
@@ -474,11 +459,8 @@ export default function AdminDashboard() {
             )}
           </TabsContent>
 
-          <TabsContent value="add">
-            <div className="max-w-lg mx-auto">
-              <UploadItemForm onSubmit={handleAddItem} />
-            </div>
-          </TabsContent>
+          {/* Add modal rendered outside the tabs */}
+          <AddItemModal open={showAddModal} onOpenChange={setShowAddModal} onSubmit={handleAddItem} />
         </Tabs>
       </main>
 
