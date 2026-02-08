@@ -16,8 +16,20 @@ interface ReportItemFormProps {
     category: ItemCategory;
     dateLost: string;
     locationLost: string;
+    color?: string;
   }) => void;
 }
+
+const normalizeColorList = (value: string): string =>
+  Array.from(
+    new Set(
+      value
+        .toLowerCase()
+        .split(/[;,/|]+/g)
+        .map((part) => part.trim())
+        .filter(Boolean)
+    )
+  ).join(",");
 
 export function ReportItemForm({ onSubmit }: ReportItemFormProps) {
   const [name, setName] = useState('');
@@ -25,6 +37,7 @@ export function ReportItemForm({ onSubmit }: ReportItemFormProps) {
   const [category, setCategory] = useState<ItemCategory>('other');
   const [dateLost, setDateLost] = useState('');
   const [locationLost, setLocationLost] = useState('');
+  const [color, setColor] = useState('');
   const { toast } = useToast();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -39,7 +52,8 @@ export function ReportItemForm({ onSubmit }: ReportItemFormProps) {
       return;
     }
 
-    onSubmit({ name, description, category, dateLost, locationLost });
+    const cleanedColor = normalizeColorList(color);
+    onSubmit({ name, description, category, dateLost, locationLost, color: cleanedColor || undefined });
     
     // Reset form
     setName('');
@@ -47,6 +61,7 @@ export function ReportItemForm({ onSubmit }: ReportItemFormProps) {
     setCategory('other');
     setDateLost('');
     setLocationLost('');
+    setColor('');
 
     toast({
       title: 'Item reported!',
@@ -108,6 +123,20 @@ export function ReportItemForm({ onSubmit }: ReportItemFormProps) {
               rows={3}
               className="bg-background border-border/50 focus:border-primary resize-none"
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="color" className="text-sm font-medium">Color</Label>
+            <Input
+              id="color"
+              placeholder="e.g., black,silver,blue"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              className="bg-background border-border/50 focus:border-primary"
+            />
+            <p className="text-xs text-muted-foreground">
+              Enter multiple colors as a comma-separated list with no spaces (example: black,silver,blue).
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

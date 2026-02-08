@@ -3,6 +3,7 @@ export interface LostItem {
   name: string;
   description: string;
   category: ItemCategory;
+  color?: string;
   dateLost: string;
   locationLost: string;
   imageUrl?: string;

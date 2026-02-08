@@ -210,9 +210,14 @@ export const createFoundItem = async (itemData: CreateFoundItemInput): Promise<F
   const user = auth.user;
   if (!user) throw new Error("Not authenticated");
 
+  const normalizedCurrentLocation =
+    typeof itemData.current_location === "string" && itemData.current_location.trim()
+      ? itemData.current_location.trim()
+      : null;
+
   const { data, error } = await supabase
     .from("found_items")
-    .insert([{ staff_id: user.id, ...itemData }])
+    .insert([{ staff_id: user.id, ...itemData, current_location: normalizedCurrentLocation }])
     .select()
     .single();
 
@@ -635,9 +640,10 @@ const calculateMatchScore = (lostItem: any, foundItem: any): number => {
   const colorWeight = 0.15;
   totalWeights += colorWeight;
   if (lostItem.color && foundItem.color) {
-    const a = String(lostItem.color).toLowerCase();
-    const b = String(foundItem.color).toLowerCase();
-    if (a.includes(b) || b.includes(a)) score += colorWeight;
+    const lostColors = parseCommaSeparatedValues(lostItem.color);
+    const foundColors = parseCommaSeparatedValues(foundItem.color);
+    const colorSimilarity = calculateListOverlapSimilarity(lostColors, foundColors);
+    score += colorSimilarity * colorWeight;
   }
 
   const brandWeight = 0.15;
@@ -663,6 +669,22 @@ const calculateMatchScore = (lostItem: any, foundItem: any): number => {
   }
 
   return score / totalWeights;
+};
+
+const parseCommaSeparatedValues = (value: unknown): string[] => {
+  if (!value) return [];
+  return String(value)
+    .toLowerCase()
+    .split(/[;,/|]+/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+};
+
+const calculateListOverlapSimilarity = (a: string[], b: string[]): number => {
+  if (a.length === 0 || b.length === 0) return 0;
+  const setB = new Set(b);
+  const overlap = a.filter((item) => setB.has(item));
+  return overlap.length / Math.max(a.length, b.length);
 };
 
 const calculateTextSimilarity = (text1: string, text2: string): number => {
