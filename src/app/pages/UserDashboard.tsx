@@ -5,7 +5,7 @@ import { MatchCard } from '@/components/MatchCard';
 import { ItemCategory, LostItem, Match, FoundItem } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Search, Package, MapPin, Clock, LogIn, LogOut, ChevronRight, X, Loader2 } from 'lucide-react';
+import { Search, Package, MapPin, Clock, LogIn, LogOut, ChevronRight, X, Loader2, Trash2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
@@ -14,6 +14,7 @@ import { getCurrentUser, signOut } from '../../lib/auth';
 import {
   getUserLostReports,
   createLostItemReport,
+  deleteLostItemReport,
   findPotentialMatches,
   LostItemReportRow,
 } from '../../lib/database';
@@ -25,6 +26,7 @@ function rowToLostItem(row: LostItemReportRow): LostItem {
     name: row.item_name ?? 'Unnamed item',
     description: row.description ?? '',
     category: (row.category as ItemCategory) ?? 'other',
+    color: row.color ?? undefined,
     dateLost: row.lost_date ? String(row.lost_date).slice(0, 10) : '',
     locationLost: row.lost_location ?? '',
     status: (row.status === 'found' ? 'matched' : row.status === 'cancelled' ? 'claimed' : 'searching') as LostItem['status'],
@@ -32,6 +34,17 @@ function rowToLostItem(row: LostItemReportRow): LostItem {
     createdAt: row.created_at ?? new Date().toISOString(),
   };
 }
+
+const normalizeColorList = (value: string): string =>
+  Array.from(
+    new Set(
+      value
+        .toLowerCase()
+        .split(/[;,/|]+/g)
+        .map((part) => part.trim())
+        .filter(Boolean)
+    )
+  ).join(',');
 
 // Convert database found item to frontend FoundItem type
 function dbFoundItemToFoundItem(row: any): FoundItem {
@@ -60,6 +73,7 @@ export default function UserDashboard() {
   const [selectedReport, setSelectedReport] = useState<LostItem | null>(null);
   const [matches, setMatches] = useState<Map<string, Match[]>>(new Map());
   const [loadingMatches, setLoadingMatches] = useState(false);
+  const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
 
   // Load user and their reports on mount
   useEffect(() => {
@@ -97,6 +111,7 @@ export default function UserDashboard() {
           item_name: selectedReport.name,
           description: selectedReport.description,
           category: selectedReport.category,
+          color: selectedReport.color,
           lost_location: selectedReport.locationLost,
         };
 
@@ -132,6 +147,7 @@ export default function UserDashboard() {
     category: ItemCategory;
     dateLost: string;
     locationLost: string;
+    color?: string;
   }) => {
     if (!user) {
       toast({
@@ -144,10 +160,12 @@ export default function UserDashboard() {
     }
 
     try {
+      const cleanedColor = normalizeColorList(data.color ?? '');
       const created = await createLostItemReport({
         item_name: data.name,
         description: data.description,
         category: data.category,
+        color: cleanedColor || undefined,
         lost_date: data.dateLost,
         lost_location: data.locationLost,
         status: 'active',
@@ -179,6 +197,38 @@ export default function UserDashboard() {
       toast({ title: 'Signed out', description: 'You have been signed out.' });
     } catch (err) {
       console.error('Sign out failed:', err);
+    }
+  };
+
+  const handleDeleteReport = async (reportId: string) => {
+    const confirmed = window.confirm('Delete this lost item report? This action cannot be undone.');
+    if (!confirmed) return;
+
+    try {
+      setDeletingReportId(reportId);
+      await deleteLostItemReport(reportId);
+
+      setLostItems(prev => prev.filter(item => item.id !== reportId));
+      setSelectedReport(prev => (prev?.id === reportId ? null : prev));
+      setMatches(prev => {
+        const next = new Map(prev);
+        next.delete(reportId);
+        return next;
+      });
+
+      toast({
+        title: 'Report deleted',
+        description: 'Your lost item report has been removed.',
+      });
+    } catch (err: any) {
+      console.error('Failed to delete report:', err);
+      toast({
+        title: 'Error',
+        description: err?.message ?? 'Failed to delete report',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingReportId(null);
     }
   };
 
@@ -344,7 +394,24 @@ export default function UserDashboard() {
                               </span>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3 shrink-0">
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleDeleteReport(item.id);
+                              }}
+                              disabled={deletingReportId === item.id}
+                              className="h-8 px-2 text-destructive hover:text-destructive"
+                            >
+                              {deletingReportId === item.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-4 h-4" />
+                              )}
+                            </Button>
                             <Badge
                               variant="outline"
                               className={cn("text-xs", getStatusColor(item.status))}

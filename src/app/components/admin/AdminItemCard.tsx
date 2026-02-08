@@ -82,10 +82,7 @@ export function AdminItemCard({ item, onEdit, onClose, onCancel, onView }: Admin
                     View Details
                   </DropdownMenuItem>
 
-                  {/* Keep edit hook if you want it later; disable once returned */}
-                  <DropdownMenuItem onClick={() => onEdit(item)} disabled={item.status !== "available"}>
-                    Edit
-                  </DropdownMenuItem>
+                  {/* Edit removed per request */}
 
                   <DropdownMenuItem
                     onClick={() => onClose(item)}

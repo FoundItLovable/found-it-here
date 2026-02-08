@@ -12,7 +12,7 @@ import {
 
 import { Logo } from "@/components/Logo";
 import { AdminItemCard } from "@/components/admin/AdminItemCard";
-import { UploadItemForm } from "@/components/admin/UploadItemForm";
+import { AddItemModal } from "@/components/admin/AddItemModal";
 import { toast } from "@/hooks/use-toast";
 
 import {
@@ -79,6 +79,7 @@ export default function AdminDashboard() {
   const [sortBy, setSortBy] = useState("newest");
   const [selectedItem, setSelectedItem] = useState<FoundItem | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -185,39 +186,8 @@ export default function AdminDashboard() {
     return filtered;
   }, [items, searchQuery, categoryFilter, statusFilter, sortBy]);
 
-  async function handleCreate(data: ItemFormData) {
-    // Fetch the model's reply (plain text) before creating the item.
-    async function fetchGeminiText(): Promise<string | null> {
-      try {
-        const res = await fetch("/api/gemini");
-        if (!res.ok) return null;
-        const contentType = res.headers.get("content-type") || "";
-        if (contentType.includes("application/json")) {
-          const body = await res.json();
-          if (typeof body === "string") return body;
-          if (body?.ok && typeof body?.response === "string") return body.response;
-          const nested =
-            (body?.response?.candidates?.[0]?.content?.parts?.[0]?.text) ||
-            (body?.candidates?.[0]?.content?.parts?.[0]?.text) ||
-            null;
-          if (nested) return nested;
-          return JSON.stringify(body);
-        }
-        const text = await res.text();
-        return text.trim().length ? text : null;
-      } catch (e) {
-        return null;
-      }
-    }
-
+  async function handleCreate(data: ItemFormData & { highValue?: boolean }) {
     try {
-      const geminiText = await fetchGeminiText();
-      if (!geminiText) {
-        toast({ title: "Generative API unavailable", description: "Status check failed — creating item anyway." });
-      } else {
-        toast({ title: "Generative API available", description: "Status check successful." });
-      }
-      console.log("Gemini status check response:", geminiText);
 
       // Your DB expects found_items columns (item_name, found_location, etc.)
       const createdRow = await createFoundItem({
@@ -229,6 +199,7 @@ export default function AdminDashboard() {
         found_date: data.foundDate ?? new Date().toISOString().slice(0, 10),
         brand: data.brand ?? null,
         color: data.color ?? null,
+        high_value: data.highValue ? true : false,
         status: "available",
       });
 
@@ -238,10 +209,6 @@ export default function AdminDashboard() {
       setItems((prev) => [created, ...prev]);
       toast({ title: "Item added", description: "New found item created." });
 
-      // Show the model reply to the user if available
-      if (geminiText) {
-        toast({ title: "AI reply", description: geminiText });
-      }
     } catch (err: any) {
       console.error(err);
       toast({
@@ -283,11 +250,13 @@ export default function AdminDashboard() {
   }
 
   const handleAddItem = handleCreate;
+  
+
   const handleView = (item: FoundItem) => {
     setSelectedItem(item);
     setShowDetails(true);
   };
-  const handleEdit = () => { }; // Placeholder
+  const handleEdit = () => {}; // Edit disabled for now
   const handleClose = handleReturn;
   const handleCancel = handleDelete;
 
@@ -407,10 +376,12 @@ export default function AdminDashboard() {
               <Grid3X3 className="w-4 h-4" />
               Inventory
             </TabsTrigger>
-            <TabsTrigger value="add" className="flex items-center gap-2 data-[state=active]:bg-background">
-              <Plus className="w-4 h-4" />
-              Add Item
-            </TabsTrigger>
+            <div className="flex items-center justify-center">
+              <Button variant="ghost" size="sm" onClick={() => setShowAddModal(true)} className="flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">Add Item</span>
+              </Button>
+            </div>
           </TabsList>
 
           <TabsContent value="inventory" className="space-y-6">
@@ -445,7 +416,6 @@ export default function AdminDashboard() {
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="available">Available</SelectItem>
-                    <SelectItem value="claimed">Claimed</SelectItem>
                     <SelectItem value="returned">Returned</SelectItem>
                   </SelectContent>
                 </Select>
@@ -489,11 +459,8 @@ export default function AdminDashboard() {
             )}
           </TabsContent>
 
-          <TabsContent value="add">
-            <div className="max-w-lg mx-auto">
-              <UploadItemForm onSubmit={handleAddItem} />
-            </div>
-          </TabsContent>
+          {/* Add modal rendered outside the tabs */}
+          <AddItemModal open={showAddModal} onOpenChange={setShowAddModal} onSubmit={handleAddItem} />
         </Tabs>
       </main>
 
