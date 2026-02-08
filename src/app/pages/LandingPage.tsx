@@ -275,7 +275,7 @@ export default function LandingPage() {
             {/* <p className="text-muted-foreground">
               Join hundreds of organizations already using FoundIt
             </p> */}
-            <Link to="/signup">
+            <Link to="/admin">
               <Button size="lg">Access Admin Portal</Button>
             </Link>
           </div>
