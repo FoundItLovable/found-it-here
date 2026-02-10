@@ -156,8 +156,8 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
 
   const handleNext = () => {
     if (step === 2) {
-      if (!formData.name.trim() || !formData.description.trim()) {
-        toast({ title: 'Missing information', description: 'Please fill in item name and description.', variant: 'destructive' });
+      if (!formData.name.trim() || !formData.description.trim() || !formData.foundLocation.trim()) {
+        toast({ title: 'Missing information', description: 'Please fill in item name, description, and found location.', variant: 'destructive' });
         return;
       }
     }
@@ -167,7 +167,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
   const handleBack = () => setStep((s) => Math.max(1, s - 1));
 
   const handleFinalSubmit = async () => {
-    if (!formData.name.trim() || !formData.description.trim()) {
+    if (!formData.name.trim() || !formData.description.trim() || !formData.foundLocation.trim()) {
       toast({ title: 'Missing information', description: 'Please fill in required fields.', variant: 'destructive' });
       return;
     }
@@ -266,7 +266,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="category" className="text-sm font-medium">Category</Label>
+                <Label htmlFor="category" className="text-sm font-medium">Category *</Label>
                 <Select value={formData.category} onValueChange={(v) => setFormData((p) => ({ ...p, category: v as ItemCategory }))}>
                   <SelectTrigger className="bg-background border-border/50"><SelectValue /></SelectTrigger>
                   <SelectContent>{Object.entries(categoryLabels).map(([key, label]) => (<SelectItem key={key} value={key}>{label}</SelectItem>))}</SelectContent>
@@ -292,7 +292,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="foundLocation" className="text-sm font-medium">Found Location</Label>
+                <Label htmlFor="foundLocation" className="text-sm font-medium">Found Location *</Label>
                 <Input id="foundLocation" placeholder="e.g., Main entrance" value={formData.foundLocation} onChange={(e) => setFormData((p) => ({ ...p, foundLocation: e.target.value }))} className="bg-background border-border/50" />
               </div>
 

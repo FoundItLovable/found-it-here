@@ -17,6 +17,7 @@ interface ReportItemFormProps {
     dateLost: string;
     locationLost: string;
     color?: string;
+    brand?: string;
   }) => void;
 }
 
@@ -38,6 +39,7 @@ export function ReportItemForm({ onSubmit }: ReportItemFormProps) {
   const [dateLost, setDateLost] = useState('');
   const [locationLost, setLocationLost] = useState('');
   const [color, setColor] = useState('');
+  const [brand, setBrand] = useState('');
   const { toast } = useToast();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -53,8 +55,8 @@ export function ReportItemForm({ onSubmit }: ReportItemFormProps) {
     }
 
     const cleanedColor = normalizeColorList(color);
-    onSubmit({ name, description, category, dateLost, locationLost, color: cleanedColor || undefined });
-    
+    onSubmit({ name, description, category, dateLost, locationLost, color: cleanedColor || undefined, brand: brand.trim() || undefined });
+
     // Reset form
     setName('');
     setDescription('');
@@ -62,6 +64,7 @@ export function ReportItemForm({ onSubmit }: ReportItemFormProps) {
     setDateLost('');
     setLocationLost('');
     setColor('');
+    setBrand('');
 
     toast({
       title: 'Item reported!',
@@ -98,7 +101,7 @@ export function ReportItemForm({ onSubmit }: ReportItemFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="category" className="text-sm font-medium">Category</Label>
+            <Label htmlFor="category" className="text-sm font-medium">Category *</Label>
             <Select value={category} onValueChange={(v) => setCategory(v as ItemCategory)}>
               <SelectTrigger className="bg-background border-border/50">
                 <SelectValue />
@@ -125,18 +128,27 @@ export function ReportItemForm({ onSubmit }: ReportItemFormProps) {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="color" className="text-sm font-medium">Color</Label>
-            <Input
-              id="color"
-              placeholder="e.g., black,silver,blue"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              className="bg-background border-border/50 focus:border-primary"
-            />
-            <p className="text-xs text-muted-foreground">
-              Enter multiple colors as a comma-separated list with no spaces (example: black,silver,blue).
-            </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="color" className="text-sm font-medium">Color</Label>
+              <Input
+                id="color"
+                placeholder="e.g., black,silver"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="bg-background border-border/50 focus:border-primary"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="brand" className="text-sm font-medium">Brand</Label>
+              <Input
+                id="brand"
+                placeholder="e.g., Apple, Nike"
+                value={brand}
+                onChange={(e) => setBrand(e.target.value)}
+                className="bg-background border-border/50 focus:border-primary"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
