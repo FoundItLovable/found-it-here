@@ -241,8 +241,29 @@ export const updateFoundItem = async (
 };
 
 export const deleteFoundItem = async (id: string): Promise<FoundItemRow> => {
+  const { data: existing, error: existingError } = await supabase
+    .from("found_items")
+    .select("image_urls")
+    .eq("id", id)
+    .single();
+
+  if (existingError) throw existingError;
+
+  const imageUrls = Array.isArray((existing as any)?.image_urls)
+    ? ((existing as any).image_urls as unknown[]).map((u) => String(u ?? "")).filter(Boolean)
+    : [];
+
   const { data, error } = await supabase.from("found_items").delete().eq("id", id).select().single();
   if (error) throw error;
+
+  if (imageUrls.length > 0) {
+    const results = await Promise.allSettled(imageUrls.map((url) => deleteImage(url)));
+    const failed = results.filter((r) => r.status === "rejected");
+    if (failed.length > 0) {
+      console.warn(`deleteFoundItem: deleted row ${id} but failed to delete ${failed.length} image(s) from storage`);
+    }
+  }
+
   return data as FoundItemRow;
 };
 
@@ -613,7 +634,7 @@ export const findPotentialMatches = async (lostItemData: Partial<LostItemReportR
   });
 
   return matches
-    .filter((item: any) => item.matchScore >= 0.3)
+    .filter((item: any) => item.matchScore >= 0.45)
     .sort((a: any, b: any) => b.matchScore - a.matchScore)
     .slice(0, 5);
 };
@@ -750,4 +771,19 @@ export const uploadImage = async (file: File): Promise<string> => {
   const { data } = supabase.storage.from("item-images").getPublicUrl(fileName);
 
   return data.publicUrl;
+};
+
+export const deleteImage = async (publicUrl: string): Promise<void> => {
+  const url = String(publicUrl ?? "").trim();
+  if (!url) return;
+
+  const marker = "/storage/v1/object/public/item-images/";
+  const index = url.indexOf(marker);
+  if (index === -1) throw new Error("Invalid image URL for item-images bucket");
+
+  const filePath = decodeURIComponent(url.slice(index + marker.length));
+  if (!filePath) return;
+
+  const { error } = await supabase.storage.from("item-images").remove([filePath]);
+  if (error) throw error;
 };
