@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Checkbox } from '@/components/ui/checkbox';
 import { Upload, Camera, X, Loader2, ChevronRight, ChevronLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { uploadImage } from '../../.././lib/database';
+import { deleteImage, uploadImage } from '../../.././lib/database';
 import { mapCategory } from '../../data/categoryMap';
 
 interface AddItemModalProps {
@@ -50,6 +50,19 @@ const normalizeColorList = (value: string): string =>
     )
   ).join(',');
 
+const initialFormState = () => ({
+  name: '',
+  description: '',
+  category: 'other' as ItemCategory,
+  imageUrl: '',
+  imagePreview: null as string | null,
+  foundLocation: '',
+  color: '',
+  brand: '',
+  foundDate: new Date().toISOString().slice(0, 10),
+  highValue: false,
+});
+
 export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddItemModalProps) {
   const [step, setStep] = useState(1);
   const [uploading, setUploading] = useState(false);
@@ -57,18 +70,16 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    category: 'other' as ItemCategory,
-    imageUrl: '',
-    imagePreview: null as string | null,
-    foundLocation: '',
-    color: '',
-    brand: '',
-    foundDate: new Date().toISOString().slice(0, 10),
-    highValue: false,
-  });
+  const [formData, setFormData] = useState(initialFormState);
+
+  const cleanupUploadedImage = async (url: string) => {
+    if (!url) return;
+    try {
+      await deleteImage(url);
+    } catch (err) {
+      console.error('Failed to delete uploaded image:', err);
+    }
+  };
 
   // (initialData is synced into form when modal opens further below)
 
@@ -88,11 +99,15 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
     reader.readAsDataURL(file);
     setUploading(true);
     try {
+      const previousImageUrl = formData.imageUrl;
       const url = await uploadImage(file);
       setFormData((p) => ({ ...p, imageUrl: url }));
       toast({ title: 'Image uploaded', description: 'Your image has been uploaded successfully.' });
       console.log('Uploaded image URL:', url);
-      toast({ title: 'Analyzing image', description: 'AI analysis in progress (non-blocking)...' });
+      toast({ title: 'Analyzing image', description: 'AI analysis in progress...'});
+      if (previousImageUrl && previousImageUrl !== url) {
+        void cleanupUploadedImage(previousImageUrl);
+      }
 
       // Call server analyze endpoint to auto-fill fields (non-blocking)
       try {
@@ -150,8 +165,10 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
   };
 
   const handleRemoveImage = () => {
+    const imageUrlToDelete = formData.imageUrl;
     setFormData((p) => ({ ...p, imageUrl: '', imagePreview: null }));
     if (fileInputRef.current) fileInputRef.current.value = '';
+    if (imageUrlToDelete) void cleanupUploadedImage(imageUrlToDelete);
   };
 
   const handleNext = () => {
@@ -185,10 +202,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
         foundDate: formData.foundDate,
         highValue: formData.highValue,
       });
-      // reset
-      setFormData({ name: '', description: '', category: 'other', imageUrl: '', imagePreview: null, foundLocation: '', color: '', brand: '', foundDate: new Date().toISOString().slice(0, 10), highValue: false });
-      setStep(1);
-      onOpenChange(false);
+      handleOpenChange(false, { keepImage: true });
     } catch (e) {
       // parent handles errors
     } finally {
@@ -196,10 +210,13 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
     }
   };
 
-  const handleOpenChange = (v: boolean) => {
+  const handleOpenChange = (v: boolean, options?: { keepImage?: boolean }) => {
     if (!v) {
-      setFormData({ name: '', description: '', category: 'other', imageUrl: '', imagePreview: null, foundLocation: '', color: '', brand: '', foundDate: new Date().toISOString().slice(0, 10), highValue: false });
+      const imageUrlToDelete = options?.keepImage ? '' : formData.imageUrl;
+      setFormData(initialFormState());
       setStep(1);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (imageUrlToDelete) void cleanupUploadedImage(imageUrlToDelete);
     }
     onOpenChange(v);
   };

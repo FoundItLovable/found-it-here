@@ -54,7 +54,7 @@ function rowToFoundItem(row: any, profile: any): FoundItem {
     description: String(row?.description ?? ""),
     category: row?.category,
     status,
-    imageUrl: row?.image_url ?? undefined,
+    imageUrl: row?.image_urls?.[0] ?? row?.image_url ?? undefined,
     dateFound: safeDateOnly(row?.found_date ?? row?.created_at),
     officeId: String(profile?.office_id ?? ""),
     officeName: String(profile?.office?.office_name ?? "Office"),
@@ -199,6 +199,7 @@ export default function AdminDashboard() {
         found_date: data.foundDate ?? new Date().toISOString().slice(0, 10),
         brand: data.brand ?? null,
         color: data.color ?? null,
+        image_urls: data.imageUrl ? [data.imageUrl] : [],
         high_value: data.highValue ? true : false,
         status: "available",
       });

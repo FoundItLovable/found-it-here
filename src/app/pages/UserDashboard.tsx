@@ -49,14 +49,21 @@ const normalizeColorList = (value: string): string =>
 // Convert database found item to frontend FoundItem type
 function dbFoundItemToFoundItem(row: any): FoundItem {
   const office = row.staff?.office;
+  const normalizedImageUrl = Array.isArray(row?.image_urls)
+    ? row.image_urls[0]
+    : typeof row?.image_urls === 'string'
+      ? row.image_urls
+      : row?.image_url;
+  const normalizedStatus = String(row?.status ?? '').toLowerCase();
+
   return {
     id: row.id,
     name: row.item_name ?? 'Unnamed item',
     description: row.description ?? '',
     category: (row.category as ItemCategory) ?? 'other',
     dateFound: row.found_date ? String(row.found_date).slice(0, 10) : row.created_at?.slice(0, 10) ?? '',
-    imageUrl: row.image_urls?.[0] ?? undefined,
-    status: row.status === 'returned' ? 'returned' : 'available',
+    imageUrl: normalizedImageUrl ?? undefined,
+    status: normalizedStatus === 'returned' ? 'returned' : normalizedStatus === 'claimed' ? 'claimed' : 'available',
     officeId: office?.office_id ?? '',
     officeName: office?.office_name ?? 'Unknown Office',
     officeLocation: [office?.building_name, office?.office_address].filter(Boolean).join(' • ') || 'Unknown Location',
@@ -117,13 +124,19 @@ export default function UserDashboard() {
 
         const potentialMatches = await findPotentialMatches(lostItemData);
 
-        const formattedMatches: Match[] = potentialMatches.map((item: any, index: number) => ({
+        const availableMatches = potentialMatches.filter(
+          (item: any) => String(item?.status ?? '').toLowerCase() === 'available'
+        );
+
+        const formattedMatches: Match[] = availableMatches
+          .map((item: any, index: number) => ({
           id: `match-${selectedReport.id}-${index}`,
           lostItemId: selectedReport.id,
           foundItemId: item.id,
           confidence: Math.round(item.matchScore * 100),
           foundItem: dbFoundItemToFoundItem(item),
-        }));
+          }))
+          .filter((match) => match.confidence >= 45);
 
         setMatches(prev => new Map(prev).set(selectedReport.id, formattedMatches));
       } catch (err) {
