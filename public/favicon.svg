@@ -1,0 +1,12 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Rounded rectangle background -->
+  <rect x="10" y="10" width="80" height="80" rx="16" ry="16" fill="hsl(82, 85%, 45%)"/>
+  
+  <!-- Map pin -->
+  <g transform="translate(50, 40)">
+    <!-- Pin shape -->
+    <path d="M 0 0 C -8 0 -12 4 -12 10 C -12 18 0 30 0 30 C 0 30 12 18 12 10 C 12 4 8 0 0 0 Z" fill="white"/>
+    <!-- Center dot -->
+    <circle cx="0" cy="8" r="3" fill="hsl(82, 85%, 45%)"/>
+  </g>
+</svg>
