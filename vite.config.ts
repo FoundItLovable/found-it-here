@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
     proxy: {
-      "/api/gemini": {
+      "/api": {
         target: "http://localhost:5050",
         changeOrigin: true,
         secure: false,

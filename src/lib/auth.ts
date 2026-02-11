@@ -7,6 +7,13 @@ export type UserWithProfile = User & {
   profile: {
     id: string;
     role: Role | null;
+    office_id?: string | null;
+    office?: {
+      office_id: string;
+      office_name?: string | null;
+      building_name?: string | null;
+      office_address?: string | null;
+    } | null;
   };
 };
 
@@ -38,12 +45,31 @@ export const getCurrentUserWithProfile = async (): Promise<UserWithProfile | nul
   const user = session?.user ?? null;
   if (!user) return null;
 
-  const role = await getRoleForUser(user.id);
+  const { data: profileData, error } = await supabase
+    .from("profiles")
+    .select(
+      `
+      role,
+      office_id,
+      office:offices!office_id(
+        office_id,
+        office_name,
+        building_name,
+        office_address
+      )
+    `
+    )
+    .eq("id", user.id)
+    .single();
+
+  if (error) throw error;
 
   return Object.assign(user, {
     profile: {
       id: user.id,
-      role,
+      role: (profileData?.role ?? null) as Role | null,
+      office_id: profileData?.office_id ?? null,
+      office: (profileData?.office ?? null) as UserWithProfile["profile"]["office"],
     },
   });
 };
