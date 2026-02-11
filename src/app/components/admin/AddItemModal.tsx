@@ -350,7 +350,7 @@ const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="category" className="text-sm font-medium">Category</Label>
+                <Label htmlFor="category" className="text-sm font-medium">Category *</Label>
                 <Select value={formData.category} onValueChange={(v) => setFormData((p) => ({ ...p, category: v as ItemCategory }))}>
                   <SelectTrigger className="bg-background border-border/50"><SelectValue /></SelectTrigger>
                   <SelectContent>{Object.entries(categoryLabels).map(([key, label]) => (<SelectItem key={key} value={key}>{label}</SelectItem>))}</SelectContent>
