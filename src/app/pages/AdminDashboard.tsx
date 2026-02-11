@@ -80,6 +80,10 @@ export default function AdminDashboard() {
   const [selectedItem, setSelectedItem] = useState<FoundItem | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [staffContext, setStaffContext] = useState<{ staffId: string; officeId: string }>({
+    staffId: "",
+    officeId: "",
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -104,6 +108,7 @@ export default function AdminDashboard() {
         // In your setup, staffId is the auth user id (profiles.id matches it)
         const staffId = userWithProfile?.profile?.id ?? userWithProfile?.id;
         if (!staffId) throw new Error("Missing staff id");
+        const officeId = String(userWithProfile?.profile?.office_id ?? "");
 
         const rows = await getOfficeFoundItems(staffId, 200, 0);
         if (!mounted) return;
@@ -111,6 +116,7 @@ export default function AdminDashboard() {
         const normalized = (rows ?? []).map((r: any) => rowToFoundItem(r, userWithProfile.profile));
         setItems(normalized);
         setCurrentOffice({ name: userWithProfile.profile?.office?.office_name ?? "Office" });
+        setStaffContext({ staffId: String(staffId), officeId });
       } catch (err: any) {
         console.error(err);
         toast({
@@ -461,7 +467,13 @@ export default function AdminDashboard() {
           </TabsContent>
 
           {/* Add modal rendered outside the tabs */}
-          <AddItemModal open={showAddModal} onOpenChange={setShowAddModal} onSubmit={handleAddItem} />
+          <AddItemModal
+            open={showAddModal}
+            onOpenChange={setShowAddModal}
+            onSubmit={handleAddItem}
+            staffId={staffContext.staffId}
+            officeId={staffContext.officeId}
+          />
         </Tabs>
       </main>
 
