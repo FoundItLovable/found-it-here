@@ -130,7 +130,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
     try {
       await deleteImage(url);
     } catch (err) {
-      console.error('Failed to delete uploaded image:', err);
+      console.error('Failed to delete image:', err);
     }
   };
 
