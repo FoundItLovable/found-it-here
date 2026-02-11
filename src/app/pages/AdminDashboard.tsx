@@ -196,7 +196,7 @@ export default function AdminDashboard() {
         category: data.category,
         found_location: data.foundLocation ?? null,
         current_location: data.foundLocation ?? null,
-        found_date: data.foundDate ?? new Date().toISOString().slice(0, 10),
+        found_date: data.foundDate ?? new Date().toLocaleDateString("en-CA"),
         brand: data.brand ?? null,
         color: data.color ?? null,
         image_urls: data.imageUrl ? [data.imageUrl] : [],

@@ -50,6 +50,8 @@ const normalizeColorList = (value: string): string =>
     )
   ).join(',');
 
+const todayLocalISO = () => new Date().toLocaleDateString('en-CA');
+
 const initialFormState = () => ({
   name: '',
   description: '',
@@ -59,7 +61,7 @@ const initialFormState = () => ({
   foundLocation: '',
   color: '',
   brand: '',
-  foundDate: new Date().toISOString().slice(0, 10),
+  foundDate: todayLocalISO(),
   highValue: false,
 });
 
