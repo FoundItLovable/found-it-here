@@ -63,12 +63,25 @@ const initialFormState = () => ({
   highValue: false,
 });
 
+// Browsers can't render HEIC/HEIF; allow only PNG/JPEG
+const supportedMimeTypes = ['image/jpeg', 'image/png'];
+const supportedExtensions = ['jpg', 'jpeg', 'png'];
+
+const isSupportedImage = (file: File) => {
+  const type = file.type?.toLowerCase();
+  if (supportedMimeTypes.includes(type)) return true;
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  return ext ? supportedExtensions.includes(ext) : false;
+};
+
 export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddItemModalProps) {
   const [step, setStep] = useState(1);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cleanupRanRef = useRef(false);
+  const previousOpenRef = useRef(open);
 
   const [formData, setFormData] = useState(initialFormState);
 
@@ -83,11 +96,16 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
 
   // (initialData is synced into form when modal opens further below)
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      toast({ title: 'Invalid file type', description: 'Please select an image file (PNG, JPG, etc.)', variant: 'destructive' });
+    if (!isSupportedImage(file)) {
+      toast({
+        title: 'Unsupported image type',
+        description: 'Please upload a JPG, PNG, or WEBP. HEIC/HEIF are not supported by browsers.',
+        variant: 'destructive'
+      });
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -173,8 +191,12 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
 
   const handleNext = () => {
     if (step === 2) {
-      if (!formData.name.trim() || !formData.description.trim()) {
-        toast({ title: 'Missing information', description: 'Please fill in item name and description.', variant: 'destructive' });
+      if (!formData.name.trim() || !formData.description.trim() || !formData.foundLocation.trim() || !formData.foundDate.trim()) {
+        toast({
+          title: 'Missing information',
+          description: 'Item name, description, found location, and found date are required.',
+          variant: 'destructive'
+        });
         return;
       }
     }
@@ -184,8 +206,12 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
   const handleBack = () => setStep((s) => Math.max(1, s - 1));
 
   const handleFinalSubmit = async () => {
-    if (!formData.name.trim() || !formData.description.trim()) {
-      toast({ title: 'Missing information', description: 'Please fill in required fields.', variant: 'destructive' });
+    if (!formData.name.trim() || !formData.description.trim() || !formData.foundLocation.trim() || !formData.foundDate.trim()) {
+      toast({
+        title: 'Missing information',
+        description: 'Item name, description, found location, and found date are required.',
+        variant: 'destructive'
+      });
       return;
     }
     setSubmitting(true);
@@ -210,16 +236,44 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
     }
   };
 
+  const performCleanup = (keepImage: boolean) => {
+    const imageUrlToDelete = keepImage ? '' : formData.imageUrl;
+    setFormData(initialFormState());
+    setStep(1);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (imageUrlToDelete) void cleanupUploadedImage(imageUrlToDelete);
+    cleanupRanRef.current = true;
+  };
+
   const handleOpenChange = (v: boolean, options?: { keepImage?: boolean }) => {
     if (!v) {
-      const imageUrlToDelete = options?.keepImage ? '' : formData.imageUrl;
-      setFormData(initialFormState());
-      setStep(1);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      if (imageUrlToDelete) void cleanupUploadedImage(imageUrlToDelete);
+      performCleanup(!!options?.keepImage);
+    } else {
+      cleanupRanRef.current = false; // opening
     }
     onOpenChange(v);
   };
+
+  // If parent closes the modal without going through handleOpenChange (e.g., route change),
+  // still clean up any uploaded image.
+  useEffect(() => {
+    if (previousOpenRef.current && !open && !cleanupRanRef.current) {
+      performCleanup(false);
+    }
+    if (!previousOpenRef.current && open) {
+      cleanupRanRef.current = false;
+    }
+    previousOpenRef.current = open;
+  }, [open]);
+
+  // On unmount, delete any uploaded image that wasn't kept
+  useEffect(() => {
+    return () => {
+      if (formData.imageUrl && !cleanupRanRef.current) {
+        void cleanupUploadedImage(formData.imageUrl);
+      }
+    };
+  }, [formData.imageUrl]);
 
   // sync initialData into form only when modal opens / initialData changes
   useEffect(() => {
@@ -250,7 +304,13 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
         {step === 1 && (
           <div className="space-y-4">
             <Label className="text-sm font-medium">Item Photo</Label>
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
             {formData.imagePreview ? (
               <div className="relative rounded-lg overflow-hidden w-full aspect-square bg-muted">
                 <img src={formData.imagePreview} alt="Preview" className="w-full h-full object-cover" />
@@ -279,7 +339,14 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="name" className="text-sm font-medium">Item Name *</Label>
-                <Input id="name" placeholder="e.g., Black iPhone" value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} className="bg-background border-border/50" />
+                <Input
+                  id="name"
+                  required
+                  placeholder="e.g., Black iPhone"
+                  value={formData.name}
+                  onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
+                  className="bg-background border-border/50"
+                />
               </div>
 
               <div className="space-y-2">
@@ -292,7 +359,15 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
 
               <div className="space-y-2 col-span-2">
                 <Label htmlFor="description" className="text-sm font-medium">Description *</Label>
-                <Textarea id="description" placeholder="Describe the item in detail..." value={formData.description} onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))} rows={3} className="bg-background border-border/50 resize-none" />
+                <Textarea
+                  id="description"
+                  required
+                  placeholder="Describe the item in detail..."
+                  value={formData.description}
+                  onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))}
+                  rows={3}
+                  className="bg-background border-border/50 resize-none"
+                />
               </div>
 
               <div className="space-y-2">
@@ -309,13 +384,27 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData }: AddI
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="foundLocation" className="text-sm font-medium">Found Location</Label>
-                <Input id="foundLocation" placeholder="e.g., Main entrance" value={formData.foundLocation} onChange={(e) => setFormData((p) => ({ ...p, foundLocation: e.target.value }))} className="bg-background border-border/50" />
+                <Label htmlFor="foundLocation" className="text-sm font-medium">Found Location *</Label>
+                <Input
+                  id="foundLocation"
+                  required
+                  placeholder="e.g., Main entrance"
+                  value={formData.foundLocation}
+                  onChange={(e) => setFormData((p) => ({ ...p, foundLocation: e.target.value }))}
+                  className="bg-background border-border/50"
+                />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="foundDate" className="text-sm font-medium">Found Date</Label>
-                <Input id="foundDate" type="date" value={formData.foundDate} onChange={(e) => setFormData((p) => ({ ...p, foundDate: e.target.value }))} className="bg-background border-border/50" />
+                <Label htmlFor="foundDate" className="text-sm font-medium">Found Date *</Label>
+                <Input
+                  id="foundDate"
+                  type="date"
+                  required
+                  value={formData.foundDate}
+                  onChange={(e) => setFormData((p) => ({ ...p, foundDate: e.target.value }))}
+                  className="bg-background border-border/50"
+                />
               </div>
             </div>
 
