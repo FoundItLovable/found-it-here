@@ -340,6 +340,20 @@ export const deleteLostItemReport = async (reportId: string): Promise<void> => {
 };
 
 // --------------------------------------------
+// ALL LOST REPORTS (for metrics)
+// --------------------------------------------
+
+export const getAllLostReports = async (): Promise<LostItemReportRow[]> => {
+  const { data, error } = await supabase
+    .from("lost_item_reports")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as LostItemReportRow[];
+};
+
+// --------------------------------------------
 // CLAIMS
 // --------------------------------------------
 
