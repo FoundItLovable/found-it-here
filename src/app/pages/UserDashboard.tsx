@@ -72,8 +72,11 @@ function dbFoundItemToFoundItem(row: any): FoundItem {
   };
 }
 
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+
 export default function UserDashboard() {
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<'report' | 'reports'>('report');
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [lostItems, setLostItems] = useState<LostItem[]>([]);
@@ -331,170 +334,179 @@ export default function UserDashboard() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Report Form */}
-          <div className="lg:col-span-1 animate-slide-up" style={{ animationDelay: '0.1s' }}>
-            <ReportItemForm onSubmit={handleReportItem} />
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'report' | 'reports')}>
+          <div className="flex justify-center mb-8">
+            <TabsList className="h-14 p-1 bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-xl shadow-sm">
+              <TabsTrigger value="report" className="px-8 py-3 text-base font-semibold rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-md transition-all duration-200">Report Item</TabsTrigger>
+              <TabsTrigger value="reports" className="px-8 py-3 text-base font-semibold rounded-lg data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-md transition-all duration-200">My Reports</TabsTrigger>
+            </TabsList>
           </div>
 
-          {/* Reports & Matches Section */}
-          <div className="lg:col-span-2 space-y-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="font-display text-2xl font-bold text-foreground">My Reports</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {user ? 'Click a report to view matches' : 'Sign in to see your reports'}
-                </p>
+          <TabsContent value="report">
+            <div className="max-w-2xl mx-auto animate-slide-up" style={{ animationDelay: '0.1s' }}>
+              <ReportItemForm onSubmit={handleReportItem} />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="reports">
+            <div className="space-y-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-display text-2xl font-bold text-foreground">My Reports</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {user ? 'Click a report to view matches' : 'Sign in to see your reports'}
+                  </p>
+                </div>
+                {user && (
+                  <Badge variant="outline" className="text-muted-foreground">
+                    {lostItems.length} {lostItems.length === 1 ? 'report' : 'reports'}
+                  </Badge>
+                )}
               </div>
-              {user && (
-                <Badge variant="outline" className="text-muted-foreground">
-                  {lostItems.length} {lostItems.length === 1 ? 'report' : 'reports'}
-                </Badge>
+
+              {!user ? (
+                <div className="text-center py-16 bg-muted/30 rounded-xl border border-dashed border-border">
+                  <LogIn className="w-12 h-12 mx-auto text-muted-foreground/40 mb-4" />
+                  <h3 className="font-display font-semibold text-lg mb-2 text-foreground">Sign in to view reports</h3>
+                  <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-4">
+                    Create an account or sign in to report lost items and track your reports.
+                  </p>
+                  <Link to="/login">
+                    <Button>Sign In</Button>
+                  </Link>
+                </div>
+              ) : lostItems.length > 0 ? (
+                <div className="space-y-3">
+                  {lostItems.map((item) => {
+                    const matchCount = getMatchCount(item.id);
+                    const isSelected = selectedReport?.id === item.id;
+
+                    return (
+                      <div key={item.id} className="space-y-3">
+                        {/* Report Card */}
+                        <button
+                          onClick={() => setSelectedReport(isSelected ? null : item)}
+                          className={cn(
+                            "w-full text-left p-4 rounded-xl border transition-all duration-200",
+                            "hover:shadow-md hover:border-primary/30",
+                            isSelected
+                              ? "bg-card border-primary shadow-md"
+                              : "bg-card border-border/50 hover:bg-card/80"
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <h3 className="font-semibold text-foreground truncate">{item.name}</h3>
+                                {matchCount > 0 && (
+                                  <Badge className="bg-primary text-primary-foreground text-xs shrink-0">
+                                    {matchCount} {matchCount === 1 ? 'match' : 'matches'}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground line-clamp-1 mb-2">
+                                {item.description}
+                              </p>
+                              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {new Date(item.dateLost).toLocaleDateString()}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="w-3 h-3" />
+                                  {item.locationLost}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleDeleteReport(item.id);
+                                }}
+                                disabled={deletingReportId === item.id}
+                                className="h-8 px-2 text-destructive hover:text-destructive"
+                              >
+                                {deletingReportId === item.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </Button>
+                              <Badge
+                                variant="outline"
+                                className={cn("text-xs", getStatusColor(item.status))}
+                              >
+                                {getStatusLabel(item.status)}
+                              </Badge>
+                              <ChevronRight
+                                className={cn(
+                                  "w-5 h-5 text-muted-foreground transition-transform duration-200",
+                                  isSelected && "rotate-90"
+                                )}
+                              />
+                            </div>
+                          </div>
+                        </button>
+
+                        {/* Expanded Matches */}
+                        {isSelected && (
+                          <div className="ml-4 pl-4 border-l-2 border-primary/30 space-y-3 animate-fade-in">
+                            {loadingMatches ? (
+                              <div className="py-6 text-center">
+                                <Loader2 className="w-8 h-8 mx-auto text-primary animate-spin mb-2" />
+                                <p className="text-sm text-muted-foreground">
+                                  Searching for matches...
+                                </p>
+                              </div>
+                            ) : getMatchesForReport(item.id).length > 0 ? (
+                              <>
+                                <div className="flex items-center justify-between py-2">
+                                  <span className="text-sm font-medium text-foreground">
+                                    Potential Matches
+                                  </span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setSelectedReport(null)}
+                                    className="h-7 w-7 p-0"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </Button>
+                                </div>
+                                {getMatchesForReport(item.id).map((match) => (
+                                  <MatchCard key={match.id} match={match} />
+                                ))}
+                              </>
+                            ) : (
+                              <div className="py-6 text-center">
+                                <Search className="w-8 h-8 mx-auto text-muted-foreground/40 mb-2" />
+                                <p className="text-sm text-muted-foreground">
+                                  No matches found yet. We're still searching!
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-16 bg-muted/30 rounded-xl border border-dashed border-border">
+                  <Package className="w-12 h-12 mx-auto text-muted-foreground/40 mb-4" />
+                  <h3 className="font-display font-semibold text-lg mb-2 text-foreground">No reports yet</h3>
+                  <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+                    Use the form to report a lost item and we'll start searching immediately.
+                  </p>
+                </div>
               )}
             </div>
-
-            {!user ? (
-              <div className="text-center py-16 bg-muted/30 rounded-xl border border-dashed border-border">
-                <LogIn className="w-12 h-12 mx-auto text-muted-foreground/40 mb-4" />
-                <h3 className="font-display font-semibold text-lg mb-2 text-foreground">Sign in to view reports</h3>
-                <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-4">
-                  Create an account or sign in to report lost items and track your reports.
-                </p>
-                <Link to="/login">
-                  <Button>Sign In</Button>
-                </Link>
-              </div>
-            ) : lostItems.length > 0 ? (
-              <div className="space-y-3">
-                {lostItems.map((item) => {
-                  const matchCount = getMatchCount(item.id);
-                  const isSelected = selectedReport?.id === item.id;
-
-                  return (
-                    <div key={item.id} className="space-y-3">
-                      {/* Report Card */}
-                      <button
-                        onClick={() => setSelectedReport(isSelected ? null : item)}
-                        className={cn(
-                          "w-full text-left p-4 rounded-xl border transition-all duration-200",
-                          "hover:shadow-md hover:border-primary/30",
-                          isSelected
-                            ? "bg-card border-primary shadow-md"
-                            : "bg-card border-border/50 hover:bg-card/80"
-                        )}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1.5">
-                              <h3 className="font-semibold text-foreground truncate">{item.name}</h3>
-                              {matchCount > 0 && (
-                                <Badge className="bg-primary text-primary-foreground text-xs shrink-0">
-                                  {matchCount} {matchCount === 1 ? 'match' : 'matches'}
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground line-clamp-1 mb-2">
-                              {item.description}
-                            </p>
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {new Date(item.dateLost).toLocaleDateString()}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <MapPin className="w-3 h-3" />
-                                {item.locationLost}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void handleDeleteReport(item.id);
-                              }}
-                              disabled={deletingReportId === item.id}
-                              className="h-8 px-2 text-destructive hover:text-destructive"
-                            >
-                              {deletingReportId === item.id ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-4 h-4" />
-                              )}
-                            </Button>
-                            <Badge
-                              variant="outline"
-                              className={cn("text-xs", getStatusColor(item.status))}
-                            >
-                              {getStatusLabel(item.status)}
-                            </Badge>
-                            <ChevronRight
-                              className={cn(
-                                "w-5 h-5 text-muted-foreground transition-transform duration-200",
-                                isSelected && "rotate-90"
-                              )}
-                            />
-                          </div>
-                        </div>
-                      </button>
-
-                      {/* Expanded Matches */}
-                      {isSelected && (
-                        <div className="ml-4 pl-4 border-l-2 border-primary/30 space-y-3 animate-fade-in">
-                          {loadingMatches ? (
-                            <div className="py-6 text-center">
-                              <Loader2 className="w-8 h-8 mx-auto text-primary animate-spin mb-2" />
-                              <p className="text-sm text-muted-foreground">
-                                Searching for matches...
-                              </p>
-                            </div>
-                          ) : getMatchesForReport(item.id).length > 0 ? (
-                            <>
-                              <div className="flex items-center justify-between py-2">
-                                <span className="text-sm font-medium text-foreground">
-                                  Potential Matches
-                                </span>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setSelectedReport(null)}
-                                  className="h-7 w-7 p-0"
-                                >
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </div>
-                              {getMatchesForReport(item.id).map((match) => (
-                                <MatchCard key={match.id} match={match} />
-                              ))}
-                            </>
-                          ) : (
-                            <div className="py-6 text-center">
-                              <Search className="w-8 h-8 mx-auto text-muted-foreground/40 mb-2" />
-                              <p className="text-sm text-muted-foreground">
-                                No matches found yet. We're still searching!
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-16 bg-muted/30 rounded-xl border border-dashed border-border">
-                <Package className="w-12 h-12 mx-auto text-muted-foreground/40 mb-4" />
-                <h3 className="font-display font-semibold text-lg mb-2 text-foreground">No reports yet</h3>
-                <p className="text-muted-foreground text-sm max-w-sm mx-auto">
-                  Use the form to report a lost item and we'll start searching immediately.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
       </main>
 
       {/* Footer */}
