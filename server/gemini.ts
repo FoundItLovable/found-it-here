@@ -195,11 +195,13 @@ export async function analyzeImage(imageUrl: string): Promise<AnalyzeResult> {
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
-  // Verify the image URL is reachable and actually an image before calling the model.
+  // Fetch image bytes so Gemini analyzes the actual image content.
+  let safeMimeType = "image/jpeg";
+  let imageBase64 = "";
   try {
-    const headResp = await fetch(imageUrl, { method: "HEAD" });
-    if (!headResp.ok) {
-      console.warn("analyzeImage: image HEAD request failed", headResp.status, imageUrl);
+    const imageResp = await fetch(imageUrl);
+    if (!imageResp.ok) {
+      console.warn("analyzeImage: image fetch failed", imageResp.status, imageUrl);
       return {
         name: "",
         description: "",
@@ -209,10 +211,10 @@ export async function analyzeImage(imageUrl: string): Promise<AnalyzeResult> {
         foundLocation: "",
         foundDate: "",
         highValue: false,
-        raw: `UNFETCHABLE: ${headResp.status}`,
+        raw: `UNFETCHABLE: ${imageResp.status}`,
       };
     }
-    const contentType = headResp.headers.get("content-type") ?? "";
+    const contentType = imageResp.headers.get("content-type") ?? "";
     if (!contentType.toLowerCase().startsWith("image/")) {
       console.warn("analyzeImage: URL not an image", contentType, imageUrl);
       return {
@@ -227,6 +229,23 @@ export async function analyzeImage(imageUrl: string): Promise<AnalyzeResult> {
         raw: `NOT_IMAGE: ${contentType}`,
       };
     }
+    const arrayBuffer = await imageResp.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    if (buffer.length === 0) {
+      return {
+        name: "",
+        description: "",
+        category: "other",
+        color: "",
+        brand: "unknow",
+        foundLocation: "",
+        foundDate: "",
+        highValue: false,
+        raw: "EMPTY_IMAGE",
+      };
+    }
+    safeMimeType = contentType.split(";")[0].trim() || "image/jpeg";
+    imageBase64 = buffer.toString("base64");
   } catch (fetchErr) {
     console.error("analyzeImage: could not reach image URL", fetchErr, imageUrl);
     return {
@@ -242,9 +261,17 @@ export async function analyzeImage(imageUrl: string): Promise<AnalyzeResult> {
     };
   }
 
-  const prompt = `You are an assistant which analyzes a single photograph of a found item.\nImage URL: ${imageUrl}\nONLY examine the visual content of the image. Do NOT fetch or reason about webpages, filenames, or other metadata.\nReturn exactly one JSON object and nothing else (no explanation, no markdown).\nRequired keys: name, description, category, color, brand, foundLocation, foundDate, highValue, confidence.\nName rule: keep name short and to the point (2-4 words max). Let description carry most details.\nCategory rule: category must be exactly one of [${ALLOWED_CATEGORIES.join(", ")}]. If unsure, return "other".\nColor rule: color must be a comma-separated list with no numbering and no spaces after commas (example: "black,silver"). Use empty string if unknown.\nBrand rule: if brand cannot be identified, set brand to "unknow".\nUse empty string for unknown string fields (except brand), false for unknown boolean, and confidence 0 when unsure. Dates must be YYYY-MM-DD or empty string. If you cannot determine the content from the image, return empty strings and confidence 0, and set brand to "unknow".`;
+  const prompt = `You are an assistant which analyzes a single photograph of a found item.\nProcess the provided image content only.\nReturn exactly one JSON object and nothing else (no explanation, no markdown).\nRequired keys: name, description, category, color, brand, foundLocation, foundDate, highValue, confidence.\nName rule: keep name short and to the point (2-4 words max). Let description carry most details.\nCategory rule: category must be exactly one of [${ALLOWED_CATEGORIES.join(", ")}]. If unsure, return "other".\nColor rule: color must be a comma-separated list with no numbering and no spaces after commas (example: "black,silver"). Use empty string if unknown.\nBrand rule: if brand cannot be identified, set brand to "unknow".\nUse empty string for unknown string fields (except brand), false for unknown boolean, and confidence 0 when unsure. Dates must be YYYY-MM-DD or empty string. If you cannot determine the content from the image, return empty strings and confidence 0, and set brand to "unknow".`;
 
-  const resp = await model.generateContent(prompt);
+  const resp = await model.generateContent([
+    prompt,
+    {
+      inlineData: {
+        data: imageBase64,
+        mimeType: safeMimeType,
+      },
+    } as any,
+  ] as any);
   const text = _extractTextFromResp(resp).trim();
 
   console.log("analyzeImage: model text:", text);
@@ -334,4 +361,3 @@ export async function analyzeImageFile(base64: string, filename: string, mimeTyp
     } catch {}
   }
 }
-

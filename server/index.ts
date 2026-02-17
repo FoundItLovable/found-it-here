@@ -97,7 +97,14 @@ function isExpired(expiresAt: number): boolean {
 function cleanupExpiredSessions() {
   const t = now();
   for (const [sessionId, session] of uploadSessions.entries()) {
-    if (session.expiresAt < t || session.status === "consumed") {
+    // Consumed sessions have been accepted by desktop flow; do not delete their storage object.
+    if (session.status === "consumed") {
+      uploadSessions.delete(sessionId);
+      continue;
+    }
+
+    // Expired sessions should be cleaned up, including any temporary uploaded object.
+    if (session.expiresAt < t) {
       if (session.storagePath) {
         void deleteSessionImage(session);
       }
@@ -444,6 +451,7 @@ app.post("/api/upload-sessions/:sessionId/consume", async (req, res) => {
 
   session.status = "consumed";
   session.consumedAt = now();
+  uploadSessions.delete(session.sessionId);
   return res.json({ ok: true, status: session.status });
 });
 
