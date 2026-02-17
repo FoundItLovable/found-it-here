@@ -27,7 +27,6 @@ export default function AdminMobileCapture() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const doneRef = useRef(false);
 
   const sessionId = useMemo(() => params.get("sessionId") ?? "", [params]);
   const token = useMemo(() => params.get("token") ?? "", [params]);
@@ -35,10 +34,6 @@ export default function AdminMobileCapture() {
   const officeId = useMemo(() => params.get("officeId") ?? "", [params]);
 
   const valid = !!sessionId && !!token;
-
-  useEffect(() => {
-    doneRef.current = done;
-  }, [done]);
 
   useEffect(() => {
     if (!file) {
@@ -129,31 +124,7 @@ export default function AdminMobileCapture() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  useEffect(() => {
-    if (!valid) return;
-
-    const cancelOnClose = () => {
-      if (!doneRef.current) return;
-      const body = JSON.stringify({ token, staffId, officeId });
-      const blob = new Blob([body], { type: "application/json" });
-      const url = `/api/upload-sessions/${encodeURIComponent(sessionId)}/cancel`;
-      if (typeof navigator.sendBeacon === "function") {
-        navigator.sendBeacon(url, blob);
-        return;
-      }
-      void fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-        keepalive: true,
-      });
-    };
-
-    window.addEventListener("pagehide", cancelOnClose);
-    return () => {
-      window.removeEventListener("pagehide", cancelOnClose);
-    };
-  }, [valid, sessionId, token, staffId, officeId]);
+  // Do not auto-cancel on close after upload success; desktop flow consumes the image.
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
