@@ -5,18 +5,22 @@ import { useNavigate, Link } from "react-router-dom";
 import { getCurrentUserWithProfile, isStaff, signOut } from "../../lib/auth";
 import {
   getOfficeFoundItems,
+  getOfficeClaims,
+  getAllLostReports,
   updateFoundItem,
   deleteFoundItem,
   createFoundItem,
 } from "../../lib/database";
+import type { ClaimRow, LostItemReportRow } from "../../lib/database";
 
 import { Logo } from "@/components/Logo";
 import { AdminItemCard } from "@/components/admin/AdminItemCard";
 import { AddItemModal } from "@/components/admin/AddItemModal";
+import { MetricsPanel } from "@/components/admin/MetricsPanel";
 import { toast } from "@/hooks/use-toast";
 
 import {
-  Search, Package, Plus, ArrowLeft, Grid3X3,
+  Search, Package, Plus, ArrowLeft, Grid3X3, BarChart3,
   ListFilter, CheckCircle, XCircle, Clock,
   MapPin, Calendar, User
 } from 'lucide-react';
@@ -72,6 +76,8 @@ export default function AdminDashboard() {
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<FoundItem[]>([]);
+  const [claims, setClaims] = useState<ClaimRow[]>([]);
+  const [lostReports, setLostReports] = useState<LostItemReportRow[]>([]);
   const [currentOffice, setCurrentOffice] = useState({ name: "" });
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -110,11 +116,17 @@ export default function AdminDashboard() {
         if (!staffId) throw new Error("Missing staff id");
         const officeId = String(userWithProfile?.profile?.office_id ?? "");
 
-        const rows = await getOfficeFoundItems(staffId, 200, 0);
+        const [rows, claimsData, reportsData] = await Promise.all([
+          getOfficeFoundItems(staffId, 200, 0),
+          getOfficeClaims(staffId, 500, 0),
+          getAllLostReports(),
+        ]);
         if (!mounted) return;
 
         const normalized = (rows ?? []).map((r: any) => rowToFoundItem(r, userWithProfile.profile));
         setItems(normalized);
+        setClaims((claimsData ?? []) as ClaimRow[]);
+        setLostReports((reportsData ?? []) as LostItemReportRow[]);
         setCurrentOffice({ name: userWithProfile.profile?.office?.office_name ?? "Office" });
         setStaffContext({ staffId: String(staffId), officeId });
       } catch (err: any) {
@@ -378,10 +390,14 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="inventory" className="space-y-6">
-          <TabsList className="grid w-full max-w-sm grid-cols-2 bg-muted/50">
+          <TabsList className="grid w-full max-w-md grid-cols-3 bg-muted/50">
             <TabsTrigger value="inventory" className="flex items-center gap-2 data-[state=active]:bg-background">
               <Grid3X3 className="w-4 h-4" />
               Inventory
+            </TabsTrigger>
+            <TabsTrigger value="metrics" className="flex items-center gap-2 data-[state=active]:bg-background">
+              <BarChart3 className="w-4 h-4" />
+              Metrics
             </TabsTrigger>
             <div className="flex items-center justify-center">
               <Button variant="ghost" size="sm" onClick={() => setShowAddModal(true)} className="flex items-center gap-2">
@@ -464,6 +480,10 @@ export default function AdminDashboard() {
                 </p>
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="metrics">
+            <MetricsPanel items={items} claims={claims} lostReports={lostReports} />
           </TabsContent>
 
           {/* Add modal rendered outside the tabs */}
