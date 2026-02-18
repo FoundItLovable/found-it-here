@@ -15,7 +15,8 @@ export type FoundItemStatus = "available" | "claimed" | string;
 
 export interface FoundItemRow {
   id: string;
-  staff_id: string;
+  office_id?: string;
+  staff_id?: string;
   item_name?: string | null;
   description?: string | null;
   category?: string | null;
@@ -132,16 +133,16 @@ export const getFoundItems = async (limit = 20, offset = 0): Promise<FoundItemRo
 };
 
 export const getOfficeFoundItems = async (
-  staffId: string,
+  officeId: string,
   limit = 200,
   offset = 0
 ): Promise<FoundItemRow[]> => {
-  if (!staffId) throw new Error("officeId is required");
+  if (!officeId) throw new Error("officeId is required");
 
   const { data, error } = await supabase
     .from("found_items")
     .select("*")
-    .eq("staff_id", staffId)
+    .eq("office_id", officeId)
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -209,6 +210,14 @@ export const createFoundItem = async (itemData: CreateFoundItemInput): Promise<F
   const { data: auth } = await supabase.auth.getUser();
   const user = auth.user;
   if (!user) throw new Error("Not authenticated");
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("office_id")
+    .eq("id", user.id)
+    .single();
+  if (profileError) throw profileError;
+  const officeId = String((profile as any)?.office_id ?? "").trim();
+  if (!officeId) throw new Error("Current staff profile is missing office_id");
 
   const normalizedCurrentLocation =
     typeof itemData.current_location === "string" && itemData.current_location.trim()
@@ -217,7 +226,13 @@ export const createFoundItem = async (itemData: CreateFoundItemInput): Promise<F
 
   const { data, error } = await supabase
     .from("found_items")
-    .insert([{ staff_id: user.id, ...itemData, current_location: normalizedCurrentLocation }])
+    .insert([
+      {
+        office_id: officeId,
+        ...itemData,
+        current_location: normalizedCurrentLocation,
+      },
+    ])
     .select()
     .single();
 
@@ -358,11 +373,11 @@ export const getAllLostReports = async (): Promise<LostItemReportRow[]> => {
 // --------------------------------------------
 
 export const getOfficeClaims = async (
-  staffId: string,
+  officeId: string,
   limit = 200,
   offset = 0
 ): Promise<any[]> => {
-  if (!staffId) throw new Error("staffId is required");
+  if (!officeId) throw new Error("officeId is required");
 
   const { data, error } = await supabase
     .from("claims")
@@ -377,7 +392,7 @@ export const getOfficeClaims = async (
         brand,
         found_location,
         description,
-        staff_id
+        office_id
       ),
       profiles!claims_claimant_id_fkey(
         id,
@@ -387,7 +402,7 @@ export const getOfficeClaims = async (
       )
     `
     )
-    .eq("found_items.staff_id", staffId)
+    .eq("found_items.office_id", officeId)
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
