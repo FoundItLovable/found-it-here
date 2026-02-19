@@ -117,8 +117,8 @@ export default function AdminDashboard() {
         const officeId = String(userWithProfile?.profile?.office_id ?? "");
 
         const [rows, claimsData, reportsData] = await Promise.all([
-          getOfficeFoundItems(staffId, 200, 0),
-          getOfficeClaims(staffId, 500, 0),
+          getOfficeFoundItems(officeId, 200, 0),
+          getOfficeClaims(officeId, 500, 0),
           getAllLostReports(),
         ]);
         if (!mounted) return;
