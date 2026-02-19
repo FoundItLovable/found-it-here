@@ -226,12 +226,13 @@ CREATE OR REPLACE FUNCTION "public"."handle_new_user"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
   BEGIN
-    INSERT INTO public.profiles (id, email, full_name, role)
+    INSERT INTO public.profiles (id, email, full_name, role, organization_id)
     VALUES (
       NEW.id,
       NEW.email,
       COALESCE(NEW.raw_user_meta_data->>'full_name', 'User'),
-      'user'
+      'user',
+      NULLIF(NEW.raw_user_meta_data->>'organization_id', '')::uuid
     );
     RETURN NEW;
   END;
@@ -424,6 +425,7 @@ CREATE POLICY "offices_delete_same_office" ON "public"."offices" FOR DELETE USIN
 
 -- Organizations policies
 CREATE POLICY "users read only own org" ON "public"."organizations" FOR SELECT USING (("auth"."uid"() IN ( SELECT "profiles"."id" FROM "public"."profiles" WHERE ("profiles"."organization_id" = "organizations"."organization_id"))));
+CREATE POLICY "organizations_select_all_for_signup" ON "public"."organizations" FOR SELECT USING (true);
 
 -- =============================================================================
 -- REALTIME

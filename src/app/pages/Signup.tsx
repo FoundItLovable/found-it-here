@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { signUp } from "../../lib/auth";
+import { supabase } from "../../lib/supabase";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "@/hooks/use-toast";
@@ -19,6 +21,7 @@ const signupSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   confirmPassword: z.string(),
+  organizationId: z.string().uuid("Please select your organization"),
   phoneNumber: z.string().optional(),
   studentId: z.string().optional(),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -27,10 +30,13 @@ const signupSchema = z.object({
 });
 
 type SignupFormData = z.infer<typeof signupSchema>;
+type OrganizationOption = { organization_id: string; name: string };
 
 export default function Signup() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
+  const [orgLoading, setOrgLoading] = useState(true);
 
   const form = useForm<SignupFormData>({
     resolver: zodResolver(signupSchema),
@@ -39,10 +45,40 @@ export default function Signup() {
       email: "",
       password: "",
       confirmPassword: "",
+      organizationId: "",
       phoneNumber: "",
       studentId: "",
     },
   });
+
+  useEffect(() => {
+    let mounted = true;
+    const loadOrganizations = async () => {
+      setOrgLoading(true);
+      const { data, error } = await supabase
+        .from("organizations")
+        .select("organization_id,name")
+        .order("name", { ascending: true });
+
+      if (!mounted) return;
+      if (error) {
+        toast({
+          title: "Could not load organizations",
+          description: error.message,
+          variant: "destructive",
+        });
+        setOrganizations([]);
+      } else {
+        setOrganizations((data ?? []) as OrganizationOption[]);
+      }
+      setOrgLoading(false);
+    };
+
+    void loadOrganizations();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const onSubmit = async (data: SignupFormData) => {
     setIsLoading(true);
@@ -51,6 +87,7 @@ export default function Signup() {
         email: data.email,
         password: data.password,
         fullName: data.fullName,
+        organizationId: data.organizationId,
         phoneNumber: data.phoneNumber,
         studentId: data.studentId,
       });
@@ -163,6 +200,31 @@ export default function Signup() {
                         <Input type="password" placeholder="••••••••" className="pl-10" {...field} />
                       </div>
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="organizationId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Organization</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={orgLoading || isLoading}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={orgLoading ? "Loading organizations..." : "Select organization"} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {organizations.map((org) => (
+                          <SelectItem key={org.organization_id} value={org.organization_id}>
+                            {org.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

@@ -98,6 +98,7 @@ export interface SignUpData {
   fullName: string;
   phoneNumber?: string;
   studentId?: string;
+  organizationId: string;
 }
 
 export const signUp = async (data: SignUpData) => {
@@ -109,6 +110,7 @@ export const signUp = async (data: SignUpData) => {
         full_name: data.fullName,
         phone_number: data.phoneNumber || null,
         student_id: data.studentId || null,
+        organization_id: data.organizationId,
       },
     },
   });
@@ -127,6 +129,17 @@ export const signUp = async (data: SignUpData) => {
   // Supabase returns identities as empty array for existing unconfirmed users
   if (authData.user.identities?.length === 0) {
     throw new Error("An account with this email already exists");
+  }
+
+  if (authData.session?.user?.id) {
+    const { error: profileUpdateError } = await supabase
+      .from("profiles")
+      .update({ organization_id: data.organizationId })
+      .eq("id", authData.session.user.id);
+
+    if (profileUpdateError) {
+      throw new Error(`Account created but organization could not be set: ${profileUpdateError.message}`);
+    }
   }
 
   return authData;
