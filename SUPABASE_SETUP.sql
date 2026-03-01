@@ -93,11 +93,13 @@ CREATE TABLE IF NOT EXISTS "public"."found_items" (
     "created_at" timestamp with time zone DEFAULT "now"(),
     "updated_at" timestamp with time zone DEFAULT "now"(),
     "high_value" boolean DEFAULT false NOT NULL,
+    "show_in_public_catalog" boolean DEFAULT true NOT NULL,
     CONSTRAINT "found_items_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "found_items_status_check" CHECK (("status" = ANY (ARRAY['available'::"text", 'claimed'::"text", 'returned'::"text"])))
 );
 
 COMMENT ON COLUMN "public"."found_items"."high_value" IS 'Labels an item as high value';
+COMMENT ON COLUMN "public"."found_items"."show_in_public_catalog" IS 'When true, item appears in public browse/search. When false, hidden from catalog but still included in lost-item matching.';
 
 CREATE TABLE IF NOT EXISTS "public"."lost_item_reports" (
     "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,

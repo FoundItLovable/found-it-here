@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 
 import type { FoundItem, ItemFormData } from "@/types";
 import { categoryLabels } from "@/types";
@@ -68,6 +69,7 @@ function rowToFoundItem(row: any, profile: any): FoundItem {
     updatedAt: String(row?.updated_at ?? row?.created_at ?? new Date().toISOString()),
     color: row?.color ?? undefined,
     brand: row?.brand ?? undefined,
+    showInPublicCatalog: row?.show_in_public_catalog !== false,
   };
 }
 
@@ -204,7 +206,7 @@ export default function AdminDashboard() {
     return filtered;
   }, [items, searchQuery, categoryFilter, statusFilter, sortBy]);
 
-  async function handleCreate(data: ItemFormData & { highValue?: boolean }) {
+  async function handleCreate(data: ItemFormData & { highValue?: boolean; showInPublicCatalog?: boolean }) {
     try {
 
       // Your DB expects found_items columns (item_name, found_location, etc.)
@@ -219,6 +221,7 @@ export default function AdminDashboard() {
         color: data.color ?? null,
         image_urls: data.imageUrl ? [data.imageUrl] : [],
         high_value: data.highValue ? true : false,
+        show_in_public_catalog: data.showInPublicCatalog !== false,
         status: "available",
       });
 
@@ -233,6 +236,24 @@ export default function AdminDashboard() {
       toast({
         title: "Create failed",
         description: err?.message ?? "Could not create item",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function handleToggleCatalogVisibility(item: FoundItem) {
+    const next = !item.showInPublicCatalog;
+    try {
+      await updateFoundItem(item.id, { show_in_public_catalog: next });
+      setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, showInPublicCatalog: next } : x)));
+      toast({
+        title: next ? "Item now visible" : "Item hidden from catalog",
+        description: next ? `${item.name} will appear in public browse/search.` : `${item.name} is hidden from browse/search but still appears in matching.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Update failed",
+        description: err?.message ?? "Could not update visibility",
         variant: "destructive",
       });
     }
@@ -466,6 +487,7 @@ export default function AdminDashboard() {
                     onClose={handleClose}
                     onCancel={handleCancel}
                     onView={handleView}
+                    onToggleCatalogVisibility={handleToggleCatalogVisibility}
                   />
                 ))}
               </div>
@@ -526,6 +548,25 @@ export default function AdminDashboard() {
                       <span>By: {selectedItem.checkedInBy}</span>
                     </div>
                   </div>
+                  {selectedItem.status === 'available' && (
+                    <div className="flex items-center justify-between rounded-lg border border-border/50 p-3 bg-muted/20">
+                      <div>
+                        <p className="text-sm font-medium">Show in public catalog</p>
+                        <p className="text-xs text-muted-foreground">
+                          {selectedItem.showInPublicCatalog !== false
+                            ? 'Visible in browse/search'
+                            : 'Hidden from browse/search (still in matching)'}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={selectedItem.showInPublicCatalog !== false}
+                        onCheckedChange={() => {
+                          handleToggleCatalogVisibility(selectedItem);
+                          setSelectedItem((prev) => prev ? { ...prev, showInPublicCatalog: !prev.showInPublicCatalog } : null);
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2 pt-4">
                   {selectedItem.status === 'available' && (
