@@ -12,6 +12,8 @@ import { Upload, Camera, X, Loader2, ChevronRight, ChevronLeft, QrCode, Link as 
 import { useToast } from '@/hooks/use-toast';
 import { deleteImage, uploadImage } from '../../.././lib/database';
 import { mapCategory } from '../../data/categoryMap';
+import { shouldDefaultHidden } from '@/lib/catalogVisibility';
+import { Switch } from '@/components/ui/switch';
 
 interface AddItemModalProps {
   open: boolean;
@@ -28,6 +30,7 @@ interface AddItemModalProps {
     brand?: string;
     foundDate?: string;
     highValue?: boolean;
+    showInPublicCatalog?: boolean;
   }>;
   onSubmit: (data: {
     name: string;
@@ -39,6 +42,7 @@ interface AddItemModalProps {
     brand?: string;
     foundDate?: string;
     highValue?: boolean;
+    showInPublicCatalog?: boolean;
   }) => Promise<void> | void;
 }
 
@@ -75,6 +79,7 @@ const initialFormState = () => ({
   brand: '',
   foundDate: todayLocalISO(),
   highValue: false,
+  showInPublicCatalog: true,
 });
 
 // Browsers can't render HEIC/HEIF; allow only PNG/JPEG
@@ -274,6 +279,11 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
           if (!prev.foundLocation?.trim() && data.foundLocation) next.foundLocation = data.foundLocation;
           if (!prev.foundDate?.trim() && data.foundDate && /^\d{4}-\d{2}-\d{2}$/.test(data.foundDate)) next.foundDate = data.foundDate;
           if (data.highValue === true) next.highValue = true;
+          next.showInPublicCatalog = !shouldDefaultHidden(
+            (next.category || prev.category) as ItemCategory,
+            next.name || prev.name,
+            next.description || prev.description
+          );
           return next;
         });
         toast({ title: 'AI analysis applied', description: 'Fields were pre-filled. Please verify before submitting.' });
@@ -340,6 +350,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
         brand: formData.brand || undefined,
         foundDate: formData.foundDate,
         highValue: formData.highValue,
+        showInPublicCatalog: formData.showInPublicCatalog,
       });
       handleOpenChange(false, { keepImage: true });
     } catch (e) {
@@ -437,6 +448,16 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
     };
   }, [formData.imageUrl]);
 
+  // Auto-default showInPublicCatalog to hidden when item is "expensive" (reduces staff clicks)
+  // Only auto-set to hidden; never auto-set to true (user may have chosen to show)
+  useEffect(() => {
+    if (!open) return;
+    const defaultHidden = shouldDefaultHidden(formData.category, formData.name, formData.description);
+    if (defaultHidden) {
+      setFormData((prev) => (prev.showInPublicCatalog ? { ...prev, showInPublicCatalog: false } : prev));
+    }
+  }, [open, formData.category, formData.name, formData.description]);
+
   // sync initialData into form only when modal opens / initialData changes
   useEffect(() => {
     if (!open || !initialData) return;
@@ -452,6 +473,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
       brand: initialData.brand ?? prev.brand,
       foundDate: initialData.foundDate ?? prev.foundDate,
       highValue: initialData.highValue ?? prev.highValue,
+      showInPublicCatalog: initialData.showInPublicCatalog ?? prev.showInPublicCatalog,
     }));
   }, [open, initialData]);
 
@@ -724,6 +746,18 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
                   className="bg-background border-border/50"
                 />
               </div>
+
+              <div className="col-span-2 flex items-center justify-between rounded-lg border border-border/50 p-4 bg-muted/20">
+                <div>
+                  <Label htmlFor="showInPublicCatalog" className="text-sm font-medium">Show in public catalog</Label>
+                  <p className="text-xs text-muted-foreground mt-1">When off, item is hidden from browse/search but still appears in lost-item matching.</p>
+                </div>
+                <Switch
+                  id="showInPublicCatalog"
+                  checked={formData.showInPublicCatalog}
+                  onCheckedChange={(checked) => setFormData((p) => ({ ...p, showInPublicCatalog: !!checked }))}
+                />
+              </div>
             </div>
 
             <div className="flex gap-3 justify-end pt-4">
@@ -752,6 +786,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
                 <div><span className="text-muted-foreground">Category:</span> <span className="font-medium">{categoryLabels[formData.category]}</span></div>
                 {formData.imagePreview && <div><span className="text-muted-foreground">Photo:</span> <span className="font-medium">Yes</span></div>}
                 {formData.highValue && <div><span className="text-destructive">High Value Item</span></div>}
+                <div><span className="text-muted-foreground">Show in catalog:</span> <span className="font-medium">{formData.showInPublicCatalog ? 'Yes' : 'No (hidden)'}</span></div>
               </div>
             </div>
 
