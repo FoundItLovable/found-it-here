@@ -472,6 +472,9 @@ export default function UserDashboard() {
                     />
                   </div>
                 )}
+                {!user && (
+                  <p className="text-sm text-muted-foreground mt-1">Sign in to see your reports</p>
+                )}
               </div>
 
               {!user ? (

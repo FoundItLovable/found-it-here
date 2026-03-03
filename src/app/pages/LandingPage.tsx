@@ -100,12 +100,12 @@ export default function LandingPage() {
       description:
         'Automatic alerts when potential matches are found, keeping everyone informed.',
     },
-    {
-      icon: Users,
-      title: 'Multi-User Support',
-      description:
-        'Perfect for teams with role-based access and collaborative workflows.',
-    },
+    // {
+    //   icon: Users,
+    //   title: 'Multi-User Support',
+    //   description:
+    //     'Perfect for teams with role-based access and collaborative workflows.',
+    // },
   ];
 
   const handleReviewScroll = (direction: 'prev' | 'next') => {
@@ -323,9 +323,6 @@ export default function LandingPage() {
             <div className="max-w-2xl mx-auto bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl border border-primary/20 p-8 md:p-12 text-center space-y-4">
               <h3 className="font-display text-2xl font-bold">Ready to streamline your lost & found?</h3>
               <br/>
-              {/* <p className="text-muted-foreground">
-                Join hundreds of organizations already using FoundIt
-              </p> */}
               <Link to="/admin">
                 <Button size="lg">Access Admin Portal</Button>
               </Link>
@@ -407,9 +404,6 @@ export default function LandingPage() {
               <h2 className="font-display text-3xl md:text-4xl font-bold">
                 Start Reuniting Lost Items Today
               </h2>
-              {/* <p className="text-muted-foreground text-lg">
-                Join the hundreds of organizations that trust FoundIt to manage their lost & found operations
-              </p> */}
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Link to="/signup">
                   <Button size="lg" className="gap-2">
