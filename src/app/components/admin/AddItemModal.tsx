@@ -123,6 +123,8 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
   const qrConsumedRef = useRef(false);
   const cleanupRanRef = useRef(false);
   const previousOpenRef = useRef(open);
+  const analyzeInFlightRef = useRef(false);
+  const analyzeRequestIdRef = useRef(0);
 
   const [formData, setFormData] = useState(initialFormState);
   const qrImageSrc = useMemo(() => {
@@ -238,14 +240,26 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
   };
 
   const handleAnalyzeImage = async () => {
+    if (analyzeInFlightRef.current) {
+      console.log('[AddItemModal] analyze ignored: request already in flight');
+      return;
+    }
     if (uploading) return;
     if (!formData.imageUrl) {
       toast({ title: 'Image still uploading', description: 'Wait for upload to finish before analyzing.' });
       return;
     }
 
+    analyzeInFlightRef.current = true;
+    const requestId = ++analyzeRequestIdRef.current;
     setAnalyzing(true);
     toast({ title: 'Analyzing image', description: 'AI analysis in progress...' });
+    console.log('[AddItemModal] analyze start', {
+      requestId,
+      mode: selectedFile ? 'analyze-file' : 'analyze-url',
+      hasSelectedFile: !!selectedFile,
+      imageUrl: formData.imageUrl,
+    });
 
     try {
       const resp = selectedFile
@@ -260,8 +274,10 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
         : await fetch('/api/gemini/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageUrl: formData.imageUrl }),
-          });
+              body: JSON.stringify({ imageUrl: formData.imageUrl }),
+            });
+
+      console.log('[AddItemModal] analyze response', { requestId, status: resp.status, ok: resp.ok });
 
       if (resp.ok) {
         const data = await resp.json();
@@ -288,15 +304,40 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
         });
         toast({ title: 'AI analysis applied', description: 'Fields were pre-filled. Please verify before submitting.' });
       } else {
-        console.warn('AI analyze returned non-OK', resp.status);
-        toast({ title: 'AI analysis failed', description: 'Could not parse the image. You can fill fields manually.', variant: 'destructive' });
+        let errorPayload: any = null;
+        try {
+          errorPayload = await resp.json();
+        } catch {
+          // ignore JSON parse failures
+        }
+        console.warn('AI analyze returned non-OK', {
+          requestId,
+          status: resp.status,
+          error: errorPayload?.error,
+          details: errorPayload?.details,
+        });
+        if (resp.status === 429) {
+          toast({
+            title: 'AI quota exceeded',
+            description: errorPayload?.details ?? 'Gemini rate/quota limit reached. Wait a minute and try again.',
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'AI analysis failed',
+            description: errorPayload?.details ?? 'Could not parse the image. You can fill fields manually.',
+            variant: 'destructive',
+          });
+        }
       }
     } catch (err) {
       console.error('AI analyze error:', err);
       toast({ title: 'AI analysis failed', description: 'Could not parse the image. You can fill fields manually.', variant: 'destructive' });
     } finally {
+      analyzeInFlightRef.current = false;
       setAnalyzing(false);
       setAnalysisDone(true);
+      console.log('[AddItemModal] analyze finish', { requestId });
     }
   };
 

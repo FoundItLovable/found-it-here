@@ -1,7 +1,4 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import fs from "fs/promises";
-import path from "path";
-import os from "os";
 import { categoryLabels } from "../src/app/types";
 
 export type AnalyzeResult = {
@@ -309,55 +306,33 @@ export async function analyzeImageFile(base64: string, filename: string, mimeTyp
     ? mimeType
     : "image/jpeg";
 
-  const buffer = Buffer.from(sanitizedBase64, "base64");
-  const tmpDir = os.tmpdir();
-  const tmpPath = path.join(tmpDir, `${Date.now()}-${filename}`);
-  try {
-    await fs.writeFile(tmpPath, buffer);
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
-    const prompt = `You are an assistant which analyzes a single photograph of a found item.\nProcess the uploaded image content only.\nReturn exactly one JSON object and nothing else (no explanation, no markdown).\nRequired keys: name, description, category, color, brand, foundLocation, foundDate, highValue, confidence.\nName rule: keep name short and to the point (2-4 words max). Let description carry most details.\nCategory rule: category must be exactly one of [${ALLOWED_CATEGORIES.join(", ")}]. If unsure, return "other".\nColor rule: color must be a comma-separated list with no numbering and no spaces after commas (example: "black,silver"). Use empty string if unknown.\nBrand rule: if brand cannot be identified, set brand to "unknow".\nUse empty string for unknown string fields (except brand), false for unknown boolean, and confidence 0 when unsure.`;
-    let resp: any;
+  const prompt = `You are an assistant which analyzes a single photograph of a found item.\nProcess the uploaded image content only.\nReturn exactly one JSON object and nothing else (no explanation, no markdown).\nRequired keys: name, description, category, color, brand, foundLocation, foundDate, highValue, confidence.\nName rule: keep name short and to the point (2-4 words max). Let description carry most details.\nCategory rule: category must be exactly one of [${ALLOWED_CATEGORIES.join(", ")}]. If unsure, return "other".\nColor rule: color must be a comma-separated list with no numbering and no spaces after commas (example: "black,silver"). Use empty string if unknown.\nBrand rule: if brand cannot be identified, set brand to "unknow".\nUse empty string for unknown string fields (except brand), false for unknown boolean, and confidence 0 when unsure.`;
 
-    // Prefer inline image bytes because files.upload is not available in all SDK versions.
-    if (typeof (genAI as any)?.files?.upload === "function") {
-      try {
-        const uploaded = await (genAI as any).files.upload({ file: tmpPath, config: { mimeType: safeMimeType } });
-        const fileUri = (uploaded as any)?.uri || (uploaded as any)?.data?.uri || (uploaded as any)?.file?.uri || (uploaded as any)?.fileUri;
-        if (fileUri) {
-          const filePrompt = `${prompt}\nUploaded file URI: ${fileUri}`;
-          resp = await model.generateContent(filePrompt as any);
-        } else {
-          console.warn("analyzeImageFile: upload returned no uri, falling back to inlineData");
-        }
-      } catch (e) {
-        console.warn("files.upload path failed, falling back to inlineData:", e);
-      }
-    }
+  console.log("analyzeImageFile: submitting single generateContent call", {
+    filename,
+    mimeType: safeMimeType,
+    bytes: Buffer.from(sanitizedBase64, "base64").length,
+    hasFallbackImageUrl: Boolean(fallbackImageUrl),
+  });
 
-    if (!resp) {
-      resp = await model.generateContent([
-        prompt,
-        {
-          inlineData: {
-            data: sanitizedBase64,
-            mimeType: safeMimeType,
-          },
-        } as any,
-      ] as any);
-    }
+  const resp = await model.generateContent([
+    prompt,
+    {
+      inlineData: {
+        data: sanitizedBase64,
+        mimeType: safeMimeType,
+      },
+    } as any,
+  ] as any);
 
-    const text = _extractTextFromResp(resp).trim();
-    console.log("analyzeImageFile: model text:", text?.slice?.(0, 1000));
+  const text = _extractTextFromResp(resp).trim();
+  console.log("analyzeImageFile: model text:", text?.slice?.(0, 1000));
 
-    const parsed = _tryParseModelJson(text);
-    if (parsed.success) return _normalizeParsed(parsed.value);
+  const parsed = _tryParseModelJson(text);
+  if (parsed.success) return _normalizeParsed(parsed.value);
 
-    return { name: "", description: "", category: "other", color: "", brand: "unknow", foundLocation: "", foundDate: "", highValue: false, raw: text };
-  } finally {
-    try {
-      await fs.unlink(tmpPath);
-    } catch {}
-  }
+  return { name: "", description: "", category: "other", color: "", brand: "unknow", foundLocation: "", foundDate: "", highValue: false, raw: text };
 }

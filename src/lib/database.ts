@@ -9,6 +9,7 @@ export interface OfficeRow {
   office_name: string;
   building_name?: string | null;
   office_address?: string | null;
+  organization_id?: string | null;
 }
 
 export type FoundItemStatus = "available" | "claimed" | string;
@@ -211,6 +212,7 @@ export const getFoundItem = async (itemId: string): Promise<FoundItemRow> => {
 };
 
 export const createFoundItem = async (itemData: CreateFoundItemInput): Promise<FoundItemRow> => {
+  console.log("[createFoundItem] start");
   const { data: auth } = await supabase.auth.getUser();
   const user = auth.user;
   if (!user) throw new Error("Not authenticated");
@@ -241,7 +243,56 @@ export const createFoundItem = async (itemData: CreateFoundItemInput): Promise<F
     .single();
 
   if (error) throw error;
-  return data as FoundItemRow;
+  const created = data as FoundItemRow;
+  console.log("[createFoundItem] created found item", {
+    foundItemId: created?.id,
+    officeId: created?.office_id,
+  });
+
+  try {
+    console.log("[createFoundItem] requesting server-side potential match update");
+    await requestAdminPotentialMatchUpdate(created.id);
+    console.log("[createFoundItem] server-side potential match update finished");
+  } catch (matchError) {
+    console.error("createFoundItem: potential match persistence failed", matchError);
+  }
+
+  return created;
+};
+
+const requestAdminPotentialMatchUpdate = async (foundItemId: string): Promise<void> => {
+  const trimmedFoundItemId = String(foundItemId ?? "").trim();
+  if (!trimmedFoundItemId) throw new Error("foundItemId is required");
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) throw new Error("No active access token");
+
+  const response = await fetch("/api/admin/potential-matches/update", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      foundItemId: trimmedFoundItemId,
+      actor: "admin",
+    }),
+  });
+
+  if (!response.ok) {
+    let message = `Server match update failed (${response.status})`;
+    try {
+      const payload = await response.json();
+      if (payload?.error) message = `${message}: ${payload.error}`;
+    } catch {
+      // ignore non-json error payload
+    }
+    throw new Error(message);
+  }
+
+  const payload = await response.json();
+  console.log("[requestAdminPotentialMatchUpdate] success", payload);
 };
 
 export const updateFoundItem = async (
