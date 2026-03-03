@@ -124,7 +124,7 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
       {/* Navigation Bar */}
       <header className="sticky top-0 z-50 border-b border-white/20 bg-background/40 backdrop-blur-2xl shadow-lg shadow-black/5">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -166,21 +166,21 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative py-16 md:py-24 overflow-hidden">
+      <section className="relative py-16 md:py-24 overflow-x-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent" />
-        <div className="container mx-auto px-4 relative">
-          <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-            <FadeInSection>
-              <div className="text-center lg:text-left space-y-6">
+        <div className="container mx-auto px-4 sm:px-6 relative w-full max-w-full">
+          <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center min-w-0">
+            <FadeInSection className="min-w-0">
+              <div className="text-center lg:text-left space-y-6 min-w-0">
                 <Badge variant="secondary" className="bg-primary/10 text-primary border-0 justify-center lg:justify-start mx-auto lg:mx-0 w-fit">
                   Lost & Found Management
                 </Badge>
-                <h1 className="font-display text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight">
+                <h1 className="font-display text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight break-words">
                   The{' '}
                   <span className="text-primary">Smart</span>
                   {' '}Way to Manage Lost & Found
                 </h1>
-                <p className="text-lg text-muted-foreground max-w-2xl mx-auto lg:mx-0">
+                <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto lg:mx-0 break-words">
                   A centralized platform for campuses and businesses to manage lost items, 
                   connect them with owners, and streamline the entire recovery process.
                 </p>
@@ -206,14 +206,14 @@ export default function LandingPage() {
                   </Button>
                 </div>
 
-                <div className="pt-6 max-w-md mx-auto lg:mx-0">
+                <div className="pt-6 w-full max-w-md mx-auto lg:mx-0 min-w-0">
                   <ReunitedTicker />
                 </div>
               </div>
             </FadeInSection>
 
-            <FadeInSection delay={150}>
-              <div className="flex justify-center lg:justify-end">
+            <FadeInSection delay={150} className="min-w-0">
+              <div className="flex justify-center lg:justify-end min-w-0">
                 <HeroVisual />
               </div>
             </FadeInSection>
