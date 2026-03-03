@@ -8,7 +8,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Calendar, MoreVertical, Eye, CheckCircle, Trash2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Calendar, MoreVertical, Eye, EyeOff, CheckCircle, Trash2 } from "lucide-react";
 
 interface AdminItemCardProps {
   item: FoundItem;
@@ -16,9 +17,10 @@ interface AdminItemCardProps {
   onClose: (item: FoundItem) => void; // we’ll use this as “Mark Returned”
   onCancel: (item: FoundItem) => void; // we’ll use this as “Delete”
   onView: (item: FoundItem) => void; // kept for compatibility (you can no-op it)
+  onToggleCatalogVisibility?: (item: FoundItem) => void;
 }
 
-export function AdminItemCard({ item, onEdit, onClose, onCancel, onView }: AdminItemCardProps) {
+export function AdminItemCard({ item, onEdit, onClose, onCancel, onView, onToggleCatalogVisibility }: AdminItemCardProps) {
   const statusStyles: Record<string, string> = {
     available: "bg-primary/15 text-primary border-primary/30",
     returned: "bg-muted text-muted-foreground border-border",
@@ -49,9 +51,17 @@ export function AdminItemCard({ item, onEdit, onClose, onCancel, onView }: Admin
                 <p className="text-xs text-muted-foreground truncate">{item.description}</p>
               </div>
 
-              <Badge variant="outline" className={`${badgeClass} flex-shrink-0 text-xs capitalize`}>
-                {item.status}
-              </Badge>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {item.showInPublicCatalog === false && (
+                  <Badge variant="secondary" className="text-xs bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">
+                    <EyeOff className="w-3 h-3 mr-0.5" />
+                    Hidden
+                  </Badge>
+                )}
+                <Badge variant="outline" className={`${badgeClass} text-xs capitalize`}>
+                  {item.status}
+                </Badge>
+              </div>
             </div>
 
             <div className="flex items-center justify-between mt-2">
@@ -64,6 +74,18 @@ export function AdminItemCard({ item, onEdit, onClose, onCancel, onView }: Admin
                   {new Date(item.dateFound).toLocaleDateString()}
                 </span>
               </div>
+
+              <div className="flex items-center gap-2">
+                {item.status === "available" && onToggleCatalogVisibility && (
+                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    <span className="text-xs text-muted-foreground hidden sm:inline">Catalog</span>
+                    <Switch
+                      checked={item.showInPublicCatalog !== false}
+                      onCheckedChange={() => onToggleCatalogVisibility(item)}
+                      className="scale-75"
+                    />
+                  </div>
+                )}
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -103,6 +125,7 @@ export function AdminItemCard({ item, onEdit, onClose, onCancel, onView }: Admin
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              </div>
             </div>
           </div>
         </div>

@@ -349,18 +349,18 @@ export default function UserDashboard() {
           </TabsContent>
 
           <TabsContent value="reports">
-            <div className="space-y-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="font-display text-2xl font-bold text-foreground">My Reports</h2>
-                  <p className="text-sm text-muted-foreground mt-1">
+            <div className="max-w-2xl mx-auto space-y-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+              <div className="flex flex-col items-center">
+                <p className="text-xl font-bold text-muted-foreground mt-1">
                     {user ? 'Click a report to view matches' : 'Sign in to see your reports'}
                   </p>
-                </div>
                 {user && (
-                  <Badge variant="outline" className="text-muted-foreground">
+                  <Badge variant="outline" className="text-muted-foreground mt-1">
                     {lostItems.length} {lostItems.length === 1 ? 'report' : 'reports'}
                   </Badge>
+                )}
+                {!user && (
+                  <p className="text-sm text-muted-foreground mt-1">Sign in to see your reports</p>
                 )}
               </div>
 

@@ -25,6 +25,7 @@ export interface FoundItemRow {
   current_location?: string | null;
   image_urls?: string[] | null;
   status?: FoundItemStatus;
+  show_in_public_catalog?: boolean;
   created_at?: string;
   [k: string]: unknown;
 }
@@ -39,6 +40,7 @@ export interface CreateFoundItemInput {
   current_location?: string;
   image_urls?: string[];
   status?: FoundItemStatus;
+  show_in_public_catalog?: boolean;
   [k: string]: unknown;
 }
 
@@ -109,6 +111,7 @@ export const getFoundItems = async (limit = 20, offset = 0): Promise<FoundItemRo
     .from("found_items")
     .select("*")
     .eq("status", "available")
+    .eq("show_in_public_catalog", true)
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -141,7 +144,8 @@ export const searchFoundItems = async (
   let query = supabase
     .from("found_items")
     .select("*")
-    .eq("status", "available");
+    .eq("status", "available")
+    .eq("show_in_public_catalog", true);
 
   if (category) query = query.eq("category", category);
 

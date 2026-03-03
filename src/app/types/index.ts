@@ -28,6 +28,7 @@ export interface FoundItem {
   updatedAt?: string;
   color?: string;
   brand?: string;
+  showInPublicCatalog?: boolean;
 }
 
 export interface ItemFormData {
