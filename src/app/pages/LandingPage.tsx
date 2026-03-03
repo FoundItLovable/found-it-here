@@ -85,12 +85,12 @@ export default function LandingPage() {
       description:
         'Automatic alerts when potential matches are found, keeping everyone informed.',
     },
-    {
-      icon: Users,
-      title: 'Multi-User Support',
-      description:
-        'Perfect for teams with role-based access and collaborative workflows.',
-    },
+    // {
+    //   icon: Users,
+    //   title: 'Multi-User Support',
+    //   description:
+    //     'Perfect for teams with role-based access and collaborative workflows.',
+    // },
   ];
 
   const handleReviewScroll = (direction: 'prev' | 'next') => {
@@ -151,7 +151,8 @@ export default function LandingPage() {
               Lost & Found Management
             </Badge>
             <h1 className="font-display text-4xl md:text-6xl font-bold tracking-tight">
-              Never Lose Track of{' '}
+              Never Lose Track of
+              <br/>
               <span className="text-primary">Lost Items</span> Again
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -203,7 +204,7 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-2 gap-6">
             {features.map((feature) => {
               const Icon = feature.icon;
               return (
@@ -269,16 +270,42 @@ export default function LandingPage() {
             ))}
           </div>
 
-          <div className="max-w-2xl mx-auto bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl border border-primary/20 p-8 md:p-12 text-center space-y-4">
+          {/* <div className="max-w-2xl mx-auto bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl border border-primary/20 p-8 md:p-12 text-center space-y-4">
             <h3 className="font-display text-2xl font-bold">Ready to streamline your lost & found?</h3>
             <br/>
-            {/* <p className="text-muted-foreground">
+            <p className="text-muted-foreground">
               Join hundreds of organizations already using FoundIt
-            </p> */}
+            </p>
             <Link to="/admin">
               <Button size="lg">Access Admin Portal</Button>
             </Link>
-          </div>
+          </div> */}
+          {/* Final CTA Section */}
+          <section className="py-20 md:py-32">
+            <div className="container mx-auto px-4">
+              <div className="max-w-2xl mx-auto bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-xl border border-primary/20 p-8 md:p-16 text-center space-y-6">
+                <h2 className="font-display text-3xl md:text-4xl font-bold">
+                  Start Reuniting Lost Items Today
+                </h2>
+                {/* <p className="text-muted-foreground text-lg">
+                  Join the hundreds of organizations that trust FoundIt to manage their lost & found operations
+                </p> */}
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <Link to="/signup">
+                    <Button size="lg" className="gap-2">
+                      Create Account
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </Link>
+                  <Link to="/login">
+                    <Button size="lg" variant="outline">
+                      Sign In
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </section>
         </div>
       </section>
 
@@ -345,32 +372,6 @@ export default function LandingPage() {
         </div>
       </section> */}
 
-      {/* Final CTA Section */}
-      <section className="py-20 md:py-32">
-        <div className="container mx-auto px-4">
-          <div className="max-w-2xl mx-auto bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-xl border border-primary/20 p-8 md:p-16 text-center space-y-6">
-            <h2 className="font-display text-3xl md:text-4xl font-bold">
-              Start Reuniting Lost Items Today
-            </h2>
-            {/* <p className="text-muted-foreground text-lg">
-              Join the hundreds of organizations that trust FoundIt to manage their lost & found operations
-            </p> */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/signup">
-                <Button size="lg" className="gap-2">
-                  Create Account
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
-              <Link to="/login">
-                <Button size="lg" variant="outline">
-                  Sign In
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Footer */}
       <footer className="border-t border-border/50 bg-card/30 py-12">
