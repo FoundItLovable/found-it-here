@@ -1,11 +1,14 @@
+import { Link } from 'react-router-dom';
 import { MapPin } from 'lucide-react';
 
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg';
   showText?: boolean;
+  /** When provided, wraps the logo in a link to this path */
+  to?: string;
 }
 
-export function Logo({ size = 'md', showText = true }: LogoProps) {
+export function Logo({ size = 'md', showText = true, to }: LogoProps) {
   const iconSizes = {
     sm: 'w-5 h-5',
     md: 'w-6 h-6',
@@ -24,7 +27,7 @@ export function Logo({ size = 'md', showText = true }: LogoProps) {
     lg: 'text-3xl',
   };
 
-  return (
+  const content = (
     <div className="flex items-center gap-2.5">
       <div className={`bg-foreground ${containerSizes[size]}`}>
         <MapPin className={`${iconSizes[size]} text-primary`} />
@@ -37,4 +40,14 @@ export function Logo({ size = 'md', showText = true }: LogoProps) {
       )}
     </div>
   );
+
+  if (to) {
+    return (
+      <Link to={to} className="inline-flex hover:opacity-90 transition-opacity">
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
 }

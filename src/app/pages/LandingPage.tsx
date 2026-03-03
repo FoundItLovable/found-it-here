@@ -1,8 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { getCurrentUserWithProfile } from '../../lib/auth';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { FadeInSection } from '@/components/FadeInSection';
+import { ReunitedTicker } from '@/components/ReunitedTicker';
+import { HeroVisual } from '@/components/HeroVisual';
+import { OfficeLocationsMap } from '@/components/OfficeLocationsMap';
 import {
   Camera,
   Search,
@@ -18,6 +24,15 @@ import {
 
 export default function LandingPage() {
   const [reviewIndex, setReviewIndex] = useState(0);
+  const [logoTo, setLogoTo] = useState<string>('/');
+
+  useEffect(() => {
+    getCurrentUserWithProfile().then((u) => {
+      if (!u) setLogoTo('/');
+      else if (['staff', 'admin', 'owner'].includes(u.profile?.role ?? '')) setLogoTo('/admin');
+      else setLogoTo('/dashboard');
+    });
+  }, []);
 
   const reviews = [
     {
@@ -111,22 +126,27 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Navigation Bar */}
-      <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
+      <header className="sticky top-0 z-50 border-b border-white/20 bg-background/40 backdrop-blur-2xl shadow-lg shadow-black/5">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Logo size="md" />
-          <nav className="hidden md:flex items-center gap-8">
+          <Logo size="md" to={logoTo} />
+          <nav className="flex items-center gap-4 md:gap-8">
             <button
               onClick={() => scrollToSection('features')}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:inline"
             >
               Features
             </button>
             <button
               onClick={() => scrollToSection('how-it-works')}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:inline"
             >
               How It Works
             </button>
+            <Link to="/browse">
+              <Button variant="outline" size="sm" className="whitespace-nowrap">
+                Browse Catalog
+              </Button>
+            </Link>
             {/* <button
               onClick={() => scrollToSection('reviews')}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -134,48 +154,72 @@ export default function LandingPage() {
               Reviews
             </button> */}
           </nav>
-          <Link to="/login">
-            <Button variant="ghost" size="sm">
-              Login
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Link to="/login">
+              <Button variant="ghost" size="sm">
+                Login
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
       {/* Hero Section */}
-      <section className="relative py-20 md:py-32 overflow-hidden">
+      <section className="relative py-16 md:py-24 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent" />
         <div className="container mx-auto px-4 relative">
-          <div className="max-w-3xl mx-auto text-center space-y-6">
-            <Badge variant="secondary" className="bg-primary/10 text-primary border-0 justify-center mx-auto w-fit">
-              Lost & Found Management
-            </Badge>
-            <h1 className="font-display text-4xl md:text-6xl font-bold tracking-tight">
-              Never Lose Track of{' '}
-              <span className="text-primary">Lost Items</span> Again
-            </h1>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              A centralized platform for campuses and businesses to manage lost items, 
-              connect them with owners, and streamline the entire recovery process.
-            </p>
+          <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+            <FadeInSection>
+              <div className="text-center lg:text-left space-y-6">
+                <Badge variant="secondary" className="bg-primary/10 text-primary border-0 justify-center lg:justify-start mx-auto lg:mx-0 w-fit">
+                  Lost & Found Management
+                </Badge>
+                <h1 className="font-display text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight">
+                  The{' '}
+                  <span className="text-primary">Smart</span>
+                  {' '}Way to Manage Lost & Found
+                </h1>
+                <p className="text-lg text-muted-foreground max-w-2xl mx-auto lg:mx-0">
+                  A centralized platform for campuses and businesses to manage lost items, 
+                  connect them with owners, and streamline the entire recovery process.
+                </p>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-              <Link to="/signup">
-                <Button size="lg" className="gap-2">
-                  Get Started Free
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={() => scrollToSection('how-it-works')}
-              >
-                See How It Works
-              </Button>
-            </div>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start pt-2">
+                  <Link to="/signup">
+                    <Button size="lg" className="gap-2">
+                      Get Started Free
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </Link>
+                  <Link to="/browse">
+                    <Button size="lg" variant="outline">
+                      Browse Catalog
+                    </Button>
+                  </Link>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={() => scrollToSection('how-it-works')}
+                  >
+                    See How It Works
+                  </Button>
+                </div>
 
-            {/* <div className="grid grid-cols-3 gap-4 pt-12">
+                <div className="pt-6 max-w-md mx-auto lg:mx-0">
+                  <ReunitedTicker />
+                </div>
+              </div>
+            </FadeInSection>
+
+            <FadeInSection delay={150}>
+              <div className="flex justify-center lg:justify-end">
+                <HeroVisual />
+              </div>
+            </FadeInSection>
+          </div>
+
+          {/* <div className="grid grid-cols-3 gap-4 pt-12">
               <div className="space-y-1">
                 <div className="text-2xl md:text-3xl font-bold text-primary">10K+</div>
                 <p className="text-sm text-muted-foreground">Items Tracked</p>
@@ -189,34 +233,36 @@ export default function LandingPage() {
                 <p className="text-sm text-muted-foreground">Return Rate</p>
               </div>
             </div> */}
-          </div>
         </div>
       </section>
 
       {/* Features Section */}
       <section id="features" className="py-20 md:py-32 bg-card/30 border-y border-border/50">
         <div className="container mx-auto px-4 space-y-12">
-          <div className="max-w-2xl mx-auto text-center space-y-2">
-            <h2 className="font-display text-3xl md:text-4xl font-bold">Built for Efficiency</h2>
-            <p className="text-muted-foreground">
-              Everything you need to manage lost & found items in one place
-            </p>
-          </div>
+          <FadeInSection>
+            <div className="max-w-2xl mx-auto text-center space-y-2">
+              <h2 className="font-display text-3xl md:text-4xl font-bold">Built for Efficiency</h2>
+              <p className="text-muted-foreground">
+                Everything you need to manage lost & found items in one place
+              </p>
+            </div>
+          </FadeInSection>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((feature) => {
+            {features.map((feature, idx) => {
               const Icon = feature.icon;
               return (
-                <div
-                  key={feature.title}
-                  className="p-6 rounded-xl border border-border/50 bg-card hover:border-primary/50 hover:bg-card/80 transition-all duration-200 space-y-3"
-                >
-                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Icon className="w-6 h-6 text-primary" />
+                <FadeInSection key={feature.title} delay={idx * 80}>
+                  <div
+                    className="p-6 rounded-xl border border-border/50 bg-card hover:border-primary/50 hover:bg-card/80 hover:-translate-y-1 hover:shadow-lg transition-all duration-200 ease-out space-y-3"
+                  >
+                    <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Icon className="w-6 h-6 text-primary" />
+                    </div>
+                    <h3 className="font-semibold text-foreground">{feature.title}</h3>
+                    <p className="text-sm text-muted-foreground">{feature.description}</p>
                   </div>
-                  <h3 className="font-semibold text-foreground">{feature.title}</h3>
-                  <p className="text-sm text-muted-foreground">{feature.description}</p>
-                </div>
+                </FadeInSection>
               );
             })}
           </div>
@@ -226,12 +272,14 @@ export default function LandingPage() {
       {/* How It Works Section */}
       <section id="how-it-works" className="py-20 md:py-32">
         <div className="container mx-auto px-4 space-y-12">
-          <div className="max-w-2xl mx-auto text-center space-y-2">
-            <h2 className="font-display text-3xl md:text-4xl font-bold">How It Works</h2>
-            <p className="text-muted-foreground">
-              Three simple steps to reunite items with their owners
-            </p>
-          </div>
+          <FadeInSection>
+            <div className="max-w-2xl mx-auto text-center space-y-2">
+              <h2 className="font-display text-3xl md:text-4xl font-bold">How It Works</h2>
+              <p className="text-muted-foreground">
+                Three simple steps to reunite items with their owners
+              </p>
+            </div>
+          </FadeInSection>
 
           <div className="grid md:grid-cols-3 gap-6 md:gap-4">
             {[
@@ -254,31 +302,35 @@ export default function LandingPage() {
                   'The system matches items to reports and provides a precise location, staff verifies ownership in person, and the item is returned.',
               },
             ].map((step, idx) => (
-              <div key={step.number} className="flex flex-col items-center text-center">
-                <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold text-lg mb-4">
-                  {step.number}
-                </div>
-                <h3 className="font-semibold text-lg mb-2">{step.title}</h3>
-                <p className="text-sm text-muted-foreground">{step.description}</p>
-                {idx < 2 && (
-                  <div className="hidden md:block mt-4 text-primary">
-                    <ArrowRight className="w-5 h-5" />
+              <FadeInSection key={step.number} delay={idx * 100}>
+                <div className="flex flex-col items-center text-center">
+                  <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold text-lg mb-4">
+                    {step.number}
                   </div>
-                )}
-              </div>
+                  <h3 className="font-semibold text-lg mb-2">{step.title}</h3>
+                  <p className="text-sm text-muted-foreground">{step.description}</p>
+                  {idx < 2 && (
+                    <div className="hidden md:block mt-4 text-primary">
+                      <ArrowRight className="w-5 h-5" />
+                    </div>
+                  )}
+                </div>
+              </FadeInSection>
             ))}
           </div>
 
-          <div className="max-w-2xl mx-auto bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl border border-primary/20 p-8 md:p-12 text-center space-y-4">
-            <h3 className="font-display text-2xl font-bold">Ready to streamline your lost & found?</h3>
-            <br/>
-            {/* <p className="text-muted-foreground">
-              Join hundreds of organizations already using FoundIt
-            </p> */}
-            <Link to="/admin">
-              <Button size="lg">Access Admin Portal</Button>
-            </Link>
-          </div>
+          <FadeInSection delay={100}>
+            <div className="max-w-2xl mx-auto bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl border border-primary/20 p-8 md:p-12 text-center space-y-4">
+              <h3 className="font-display text-2xl font-bold">Ready to streamline your lost & found?</h3>
+              <br/>
+              {/* <p className="text-muted-foreground">
+                Join hundreds of organizations already using FoundIt
+              </p> */}
+              <Link to="/admin">
+                <Button size="lg">Access Admin Portal</Button>
+              </Link>
+            </div>
+          </FadeInSection>
         </div>
       </section>
 
@@ -345,30 +397,34 @@ export default function LandingPage() {
         </div>
       </section> */}
 
+      <OfficeLocationsMap />
+
       {/* Final CTA Section */}
       <section className="py-20 md:py-32">
         <div className="container mx-auto px-4">
-          <div className="max-w-2xl mx-auto bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-xl border border-primary/20 p-8 md:p-16 text-center space-y-6">
-            <h2 className="font-display text-3xl md:text-4xl font-bold">
-              Start Reuniting Lost Items Today
-            </h2>
-            {/* <p className="text-muted-foreground text-lg">
-              Join the hundreds of organizations that trust FoundIt to manage their lost & found operations
-            </p> */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/signup">
-                <Button size="lg" className="gap-2">
-                  Create Account
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
-              <Link to="/login">
-                <Button size="lg" variant="outline">
-                  Sign In
-                </Button>
-              </Link>
+          <FadeInSection>
+            <div className="max-w-2xl mx-auto bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-xl border border-primary/20 p-8 md:p-16 text-center space-y-6">
+              <h2 className="font-display text-3xl md:text-4xl font-bold">
+                Start Reuniting Lost Items Today
+              </h2>
+              {/* <p className="text-muted-foreground text-lg">
+                Join the hundreds of organizations that trust FoundIt to manage their lost & found operations
+              </p> */}
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Link to="/signup">
+                  <Button size="lg" className="gap-2">
+                    Create Account
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </Link>
+                <Link to="/login">
+                  <Button size="lg" variant="outline">
+                    Sign In
+                  </Button>
+                </Link>
+              </div>
             </div>
-          </div>
+          </FadeInSection>
         </div>
       </section>
 
@@ -377,7 +433,7 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 space-y-8">
           <div className="grid md:grid-cols-4 gap-8">
             <div className="space-y-2">
-              <Logo size="md" />
+              <Logo size="md" to={logoTo} />
               <p className="text-sm text-muted-foreground max-w-xs">
                 Simplifying lost & found management for everyone
               </p>
