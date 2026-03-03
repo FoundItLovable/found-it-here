@@ -24,6 +24,8 @@ export interface FoundItemRow {
   color?: string | null;
   found_location?: string | null;
   current_location?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   image_urls?: string[] | null;
   status?: FoundItemStatus;
   show_in_public_catalog?: boolean;
@@ -39,6 +41,8 @@ export interface CreateFoundItemInput {
   color?: string;
   found_location?: string;
   current_location?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   image_urls?: string[];
   status?: FoundItemStatus;
   show_in_public_catalog?: boolean;
@@ -56,6 +60,8 @@ export interface LostItemReportRow {
   brand?: string | null;
   color?: string | null;
   lost_location?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   status?: string | null;
   created_at?: string;
   [k: string]: unknown;
@@ -182,6 +188,63 @@ export const searchFoundItems = async (
   const { data, error } = await query.order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as FoundItemRow[];
+};
+
+export interface PublicCatalogFilters {
+  search?: string;
+  category?: string;
+  officeId?: string;
+  color?: string;
+  brand?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+const PAGE_SIZE = 24;
+
+export const getPublicCatalogItems = async (
+  filters: PublicCatalogFilters = {},
+  offset = 0
+): Promise<{ items: FoundItemRow[]; hasMore: boolean }> => {
+  let query = supabase
+    .from("found_items")
+    .select(
+      `
+      *,
+      office:offices!office_id(
+        office_id,
+        office_name,
+        building_name,
+        office_address
+      )
+    `,
+      { count: "exact" }
+    )
+    .eq("status", "available")
+    .eq("show_in_public_catalog", true)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + PAGE_SIZE - 1);
+
+  if (filters.search?.trim()) {
+    const q = filters.search.trim();
+    query = query.or(
+      `item_name.ilike.%${q}%,description.ilike.%${q}%,brand.ilike.%${q}%,color.ilike.%${q}%`
+    );
+  }
+  if (filters.category) query = query.eq("category", filters.category);
+  if (filters.officeId) query = query.eq("office_id", filters.officeId);
+  if (filters.brand?.trim()) query = query.ilike("brand", `%${filters.brand.trim()}%`);
+  if (filters.color?.trim()) query = query.ilike("color", `%${filters.color.trim()}%`);
+  if (filters.dateFrom) query = query.gte("found_date", filters.dateFrom);
+  if (filters.dateTo) query = query.lte("found_date", filters.dateTo);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const items = (data ?? []) as FoundItemRow[];
+  const hasMore = items.length === PAGE_SIZE;
+
+  return { items, hasMore };
 };
 
 export const getFoundItem = async (itemId: string): Promise<FoundItemRow> => {
@@ -645,14 +708,11 @@ export const findPotentialMatches = async (lostItemData: Partial<LostItemReportR
     .select(
       `
       *,
-      staff:profiles!staff_id(
-        full_name,
-        email,
-        office:offices!office_id(
-          office_name,
-          building_name,
-          office_address
-        )
+      office:offices!office_id(
+        office_id,
+        office_name,
+        building_name,
+        office_address
       )
     `
     )

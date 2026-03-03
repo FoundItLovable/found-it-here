@@ -18,7 +18,7 @@ export function ItemCard({ item, confidence, onViewDetails }: ItemCardProps) {
   };
 
   return (
-    <Card className="group overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 gradient-card border-border/50">
+    <Card className="group overflow-hidden transition-all duration-300 ease-out hover:shadow-xl hover:-translate-y-1 gradient-card border-border/50">
       <div className="relative aspect-[4/3] overflow-hidden bg-muted">
         {item.imageUrl ? (
           <img
