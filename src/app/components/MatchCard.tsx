@@ -6,9 +6,10 @@ import { MapPin, Calendar, Navigation, CheckCircle2 } from 'lucide-react';
 
 interface MatchCardProps {
   match: Match;
+  onNotMine?: (match: Match) => void | Promise<void>;
 }
 
-export function MatchCard({ match }: MatchCardProps) {
+export function MatchCard({ match, onNotMine }: MatchCardProps) {
   const { foundItem, confidence } = match;
 
   const getConfidenceStyle = (conf: number) => {
@@ -70,7 +71,12 @@ export function MatchCard({ match }: MatchCardProps) {
                 <Navigation className="w-3.5 h-3.5" />
                 Get Directions
               </Button>
-              <Button variant="ghost" size="sm" className="text-muted-foreground">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => void onNotMine?.(match)}
+              >
                 Not Mine
               </Button>
             </div>

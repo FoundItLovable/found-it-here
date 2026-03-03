@@ -311,20 +311,11 @@ export const updateFoundItem = async (
 };
 
 export const deleteFoundItem = async (id: string): Promise<FoundItemRow> => {
-  const { data: existing, error: existingError } = await supabase
-    .from("found_items")
-    .select("image_urls")
-    .eq("id", id)
-    .single();
+  const deletedItem = await requestAdminFoundItemDelete(id);
 
-  if (existingError) throw existingError;
-
-  const imageUrls = Array.isArray((existing as any)?.image_urls)
-    ? ((existing as any).image_urls as unknown[]).map((u) => String(u ?? "")).filter(Boolean)
+  const imageUrls = Array.isArray((deletedItem as any)?.image_urls)
+    ? ((deletedItem as any).image_urls as unknown[]).map((u) => String(u ?? "")).filter(Boolean)
     : [];
-
-  const { data, error } = await supabase.from("found_items").delete().eq("id", id).select().single();
-  if (error) throw error;
 
   if (imageUrls.length > 0) {
     const results = await Promise.allSettled(imageUrls.map((url) => deleteImage(url)));
@@ -334,7 +325,48 @@ export const deleteFoundItem = async (id: string): Promise<FoundItemRow> => {
     }
   }
 
-  return data as FoundItemRow;
+  return deletedItem;
+};
+
+const requestAdminFoundItemDelete = async (foundItemId: string): Promise<FoundItemRow> => {
+  const trimmedFoundItemId = String(foundItemId ?? "").trim();
+  if (!trimmedFoundItemId) throw new Error("foundItemId is required");
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) throw new Error("No active access token");
+
+  const response = await fetch("/api/admin/found-items/delete", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      foundItemId: trimmedFoundItemId,
+      actor: "admin",
+    }),
+  });
+
+  let payload: any = null;
+  try {
+    payload = await response.json();
+  } catch {
+    // ignore non-json response body
+  }
+
+  if (!response.ok) {
+    const message = payload?.error
+      ? `Server item delete failed (${response.status}): ${payload.error}`
+      : `Server item delete failed (${response.status})`;
+    throw new Error(message);
+  }
+
+  if (!payload?.deletedItem) {
+    throw new Error("Server item delete response missing deletedItem");
+  }
+
+  return payload.deletedItem as FoundItemRow;
 };
 
 // --------------------------------------------
@@ -355,7 +387,190 @@ export const createLostItemReport = async (
     .single();
 
   if (error) throw error;
-  return data as LostItemReportRow;
+  const created = data as LostItemReportRow;
+
+  try {
+    await requestUserPotentialMatchUpdate(created.id);
+  } catch (matchError) {
+    console.error("createLostItemReport: potential match persistence failed", matchError);
+  }
+
+  return created;
+};
+
+const requestUserPotentialMatchUpdate = async (reportId: string): Promise<void> => {
+  const trimmedReportId = String(reportId ?? "").trim();
+  if (!trimmedReportId) throw new Error("reportId is required");
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) throw new Error("No active access token");
+
+  const response = await fetch("/api/user/potential-matches/update", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ reportId: trimmedReportId }),
+  });
+
+  if (!response.ok) {
+    let message = `Server user match update failed (${response.status})`;
+    try {
+      const payload = await response.json();
+      if (payload?.error) message = `${message}: ${payload.error}`;
+    } catch {
+      // ignore non-json error payload
+    }
+    throw new Error(message);
+  }
+};
+
+export const getUserReportPotentialMatches = async (reportId: string): Promise<any[]> => {
+  const trimmedReportId = String(reportId ?? "").trim();
+  if (!trimmedReportId) throw new Error("reportId is required");
+  console.log("[getUserReportPotentialMatches] start", { reportId: trimmedReportId });
+
+  const { data: reportData, error: reportError } = await supabase
+    .from("lost_item_reports")
+    .select("id")
+    .eq("id", trimmedReportId)
+    .single();
+  if (reportError) {
+    console.error("[getUserReportPotentialMatches] report lookup failed", reportError);
+    throw reportError;
+  }
+  if (!reportData) {
+    console.warn("[getUserReportPotentialMatches] report not found", { reportId: trimmedReportId });
+    return [];
+  }
+  console.log("[getUserReportPotentialMatches] report lookup ok", { reportId: trimmedReportId });
+
+  const { data: matchRows, error: matchError } = await supabase
+    .from("potential_matches")
+    .select("match_id, report_id, lost_item_id")
+    .eq("report_id", trimmedReportId);
+  if (matchError) {
+    console.error("[getUserReportPotentialMatches] potential_matches query failed", matchError);
+    throw matchError;
+  }
+  console.log("[getUserReportPotentialMatches] potential_matches rows", {
+    reportId: trimmedReportId,
+    count: (matchRows ?? []).length,
+  });
+
+  const foundItemIds = Array.from(
+    new Set((matchRows ?? []).map((row: any) => String(row?.lost_item_id ?? "").trim()).filter(Boolean))
+  );
+  if (foundItemIds.length === 0) {
+    console.log("[getUserReportPotentialMatches] no linked found_item_ids", { reportId: trimmedReportId });
+    return [];
+  }
+  console.log("[getUserReportPotentialMatches] loading found_items", {
+    reportId: trimmedReportId,
+    foundItemCount: foundItemIds.length,
+    foundItemIds,
+  });
+
+  const { data: foundItems, error: foundItemsError } = await supabase
+    .from("found_items")
+    .select("*")
+    .in("id", foundItemIds);
+  if (foundItemsError) {
+    console.error("[getUserReportPotentialMatches] found_items query failed", foundItemsError);
+    throw foundItemsError;
+  }
+  console.log("[getUserReportPotentialMatches] found_items rows", {
+    reportId: trimmedReportId,
+    count: (foundItems ?? []).length,
+  });
+
+  const staffIds = Array.from(
+    new Set((foundItems ?? []).map((row: any) => String(row?.staff_id ?? "").trim()).filter(Boolean))
+  );
+  let staffById = new Map<string, any>();
+  let officeById = new Map<string, any>();
+
+  if (staffIds.length > 0) {
+    const { data: staffRows, error: staffError } = await supabase
+      .from("profiles")
+      .select("id, full_name, office_id")
+      .in("id", staffIds);
+    if (staffError) {
+      console.error("[getUserReportPotentialMatches] staff profile query failed", staffError);
+      throw staffError;
+    }
+
+    const officeIds = Array.from(
+      new Set((staffRows ?? []).map((row: any) => String(row?.office_id ?? "").trim()).filter(Boolean))
+    );
+
+    if (officeIds.length > 0) {
+      const { data: officeRows, error: officeError } = await supabase
+        .from("offices")
+        .select("office_id, office_name, building_name, office_address")
+        .in("office_id", officeIds);
+      if (officeError) {
+        console.error("[getUserReportPotentialMatches] office query failed", officeError);
+        throw officeError;
+      }
+      officeById = new Map((officeRows ?? []).map((row: any) => [String(row.office_id), row] as const));
+    }
+
+    staffById = new Map(
+      (staffRows ?? []).map((row: any) => [
+        String(row.id),
+        {
+          ...row,
+          office: officeById.get(String(row.office_id ?? "")) ?? null,
+        },
+      ] as const)
+    );
+  }
+
+  const foundById = new Map(
+    (foundItems ?? []).map((row: any) => [
+      String(row.id),
+      {
+        ...row,
+        staff: staffById.get(String(row?.staff_id ?? "")) ?? null,
+      },
+    ] as const)
+  );
+  const merged = (matchRows ?? [])
+    .map((row: any) => {
+      const foundItemId = String(row?.lost_item_id ?? "");
+      const foundItem = foundById.get(foundItemId);
+      if (!foundItem) return null;
+      return {
+        matchId: String(row?.match_id ?? `${trimmedReportId}:${foundItemId}`),
+        reportId: String(row?.report_id ?? trimmedReportId),
+        foundItemId,
+        foundItem,
+      };
+    })
+    .filter(Boolean);
+  console.log("[getUserReportPotentialMatches] done", {
+    reportId: trimmedReportId,
+    mergedCount: merged.length,
+  });
+  return merged;
+};
+
+export const removeUserPotentialMatch = async (reportId: string, foundItemId: string): Promise<void> => {
+  const trimmedReportId = String(reportId ?? "").trim();
+  const trimmedFoundItemId = String(foundItemId ?? "").trim();
+  if (!trimmedReportId) throw new Error("reportId is required");
+  if (!trimmedFoundItemId) throw new Error("foundItemId is required");
+
+  const { error } = await supabase
+    .from("potential_matches")
+    .delete()
+    .eq("report_id", trimmedReportId)
+    .eq("lost_item_id", trimmedFoundItemId);
+
+  if (error) throw error;
 };
 
 export interface LostReportFilters {
@@ -405,8 +620,20 @@ export const updateLostItemReport = async (
 };
 
 export const deleteLostItemReport = async (reportId: string): Promise<void> => {
-  const { error } = await supabase.from("lost_item_reports").delete().eq("id", reportId);
-  if (error) throw error;
+  const trimmedReportId = String(reportId ?? "").trim();
+  if (!trimmedReportId) throw new Error("reportId is required");
+
+  const { error: deleteMatchesError } = await supabase
+    .from("potential_matches")
+    .delete()
+    .eq("report_id", trimmedReportId);
+  if (deleteMatchesError) throw deleteMatchesError;
+
+  const { error: deleteReportError } = await supabase
+    .from("lost_item_reports")
+    .delete()
+    .eq("id", trimmedReportId);
+  if (deleteReportError) throw deleteReportError;
 };
 
 // --------------------------------------------

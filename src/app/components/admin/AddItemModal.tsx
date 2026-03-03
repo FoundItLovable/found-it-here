@@ -6,7 +6,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Upload, Camera, X, Loader2, ChevronRight, ChevronLeft, QrCode, Link as LinkIcon, Smartphone, RefreshCcw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -116,6 +115,9 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
   const [qrStatus, setQrStatus] = useState('');
   const [qrLoading, setQrLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [simulatingAnalyze, setSimulatingAnalyze] = useState(false);
+  const [analyzeGateStarted, setAnalyzeGateStarted] = useState(false);
+  const [analyzeGateDelayDone, setAnalyzeGateDelayDone] = useState(false);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraFallbackInputRef = useRef<HTMLInputElement>(null);
@@ -125,6 +127,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
   const previousOpenRef = useRef(open);
   const analyzeInFlightRef = useRef(false);
   const analyzeRequestIdRef = useRef(0);
+  const analyzedImageUrlRef = useRef('');
 
   const [formData, setFormData] = useState(initialFormState);
   const qrImageSrc = useMemo(() => {
@@ -174,7 +177,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
       const previousImageUrl = formData.imageUrl;
       const url = await uploadImage(file);
       setFormData((p) => ({ ...p, imageUrl: url }));
-      toast({ title: 'Image uploaded', description: 'Your image has been uploaded successfully. Click Analyze to continue.' });
+      void handleAnalyzeImage({ imageUrl: url, file });
       if (previousImageUrl && previousImageUrl !== url) {
         void cleanupUploadedImage(previousImageUrl);
       }
@@ -233,48 +236,55 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
     setAnalysisDone(false);
     setFormData((p) => ({ ...p, imageUrl, imagePreview: imageUrl }));
     setQrStatus('Image received from phone.');
-    toast({ title: 'Phone upload received', description: 'Image is ready. Click Analyze or Skip.' });
+    void handleAnalyzeImage({ imageUrl });
     if (previousImageUrl && previousImageUrl !== imageUrl) {
       void cleanupUploadedImage(previousImageUrl);
     }
   };
 
-  const handleAnalyzeImage = async () => {
+  const handleAnalyzeImage = async (opts?: { imageUrl?: string; file?: File | null }) => {
+    const targetImageUrl = String(opts?.imageUrl ?? formData.imageUrl ?? '').trim();
+    if (!targetImageUrl) return;
+    if (analyzedImageUrlRef.current === targetImageUrl || analysisDone) {
+      console.log('[AddItemModal] analyze ignored: already completed for image', { imageUrl: targetImageUrl });
+      return;
+    }
     if (analyzeInFlightRef.current) {
       console.log('[AddItemModal] analyze ignored: request already in flight');
       return;
     }
     if (uploading) return;
-    if (!formData.imageUrl) {
+    if (!targetImageUrl) {
       toast({ title: 'Image still uploading', description: 'Wait for upload to finish before analyzing.' });
       return;
     }
 
     analyzeInFlightRef.current = true;
+    analyzedImageUrlRef.current = targetImageUrl;
     const requestId = ++analyzeRequestIdRef.current;
     setAnalyzing(true);
-    toast({ title: 'Analyzing image', description: 'AI analysis in progress...' });
     console.log('[AddItemModal] analyze start', {
       requestId,
-      mode: selectedFile ? 'analyze-file' : 'analyze-url',
-      hasSelectedFile: !!selectedFile,
-      imageUrl: formData.imageUrl,
+      mode: opts?.file ? 'analyze-file' : 'analyze-url',
+      hasSelectedFile: !!opts?.file,
+      imageUrl: targetImageUrl,
     });
 
     try {
-      const resp = selectedFile
+      const fileToAnalyze = opts?.file ?? selectedFile;
+      const resp = fileToAnalyze
         ? await (async () => {
-            const base64 = await toBase64(selectedFile);
+            const base64 = await toBase64(fileToAnalyze);
             return fetch('/api/gemini/analyze-file', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ filename: selectedFile.name, mimeType: selectedFile.type, base64 }),
+              body: JSON.stringify({ filename: fileToAnalyze.name, mimeType: fileToAnalyze.type, base64 }),
             });
           })()
         : await fetch('/api/gemini/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ imageUrl: formData.imageUrl }),
+              body: JSON.stringify({ imageUrl: targetImageUrl }),
             });
 
       console.log('[AddItemModal] analyze response', { requestId, status: resp.status, ok: resp.ok });
@@ -302,7 +312,6 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
           );
           return next;
         });
-        toast({ title: 'AI analysis applied', description: 'Fields were pre-filled. Please verify before submitting.' });
       } else {
         let errorPayload: any = null;
         try {
@@ -341,12 +350,46 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
     }
   };
 
+  const handleSimulatedAnalyze = async () => {
+    if (!formData.foundLocation.trim()) {
+      toast({
+        title: 'Missing information',
+        description: 'Found location is required before analysis.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!formData.imageUrl) {
+      toast({
+        title: 'Missing image',
+        description: 'Please upload an image first.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (simulatingAnalyze) return;
+
+    setAnalyzeGateStarted(true);
+    setAnalyzeGateDelayDone(false);
+    setSimulatingAnalyze(true);
+    await new Promise((resolve) => window.setTimeout(resolve, 2000));
+    setSimulatingAnalyze(false);
+    setAnalyzeGateDelayDone(true);
+
+    if (analysisDone) {
+      setStep(3);
+    }
+  };
+
   const handleRemoveImage = () => {
     const imageUrlToDelete = formData.imageUrl;
     setFormData((p) => ({ ...p, imageUrl: '', imagePreview: null }));
     setSelectedFile(null);
     setAnalysisDone(false);
     setAnalyzing(false);
+    setAnalyzeGateStarted(false);
+    setAnalyzeGateDelayDone(false);
+    analyzedImageUrlRef.current = '';
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (cameraFallbackInputRef.current) cameraFallbackInputRef.current.value = '';
     if (imageUrlToDelete) void cleanupUploadedImage(imageUrlToDelete);
@@ -354,7 +397,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
 
   const handleNext = () => {
     if (step === 1 && uploading) return;
-    if (step === 2) {
+    if (step === 3) {
       if (!formData.name.trim() || !formData.description.trim() || !formData.foundLocation.trim() || !formData.foundDate.trim()) {
         toast({
           title: 'Missing information',
@@ -364,7 +407,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
         return;
       }
     }
-    setStep((s) => Math.min(3, s + 1));
+    setStep((s) => Math.min(4, s + 1));
   };
 
   const handleBack = () => setStep((s) => Math.max(1, s - 1));
@@ -407,6 +450,10 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
     setSelectedFile(null);
     setAnalysisDone(false);
     setAnalyzing(false);
+    setSimulatingAnalyze(false);
+    setAnalyzeGateStarted(false);
+    setAnalyzeGateDelayDone(false);
+    analyzedImageUrlRef.current = '';
     setUploadTab('file');
     clearQrPolling();
     setQrSession(null);
@@ -518,12 +565,21 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
     }));
   }, [open, initialData]);
 
+  useEffect(() => {
+    if (step !== 2) return;
+    if (!analyzeGateStarted || !analyzeGateDelayDone) return;
+    if (!analysisDone) return;
+    setStep(3);
+  }, [step, analyzeGateStarted, analyzeGateDelayDone, analysisDone]);
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-display text-xl">Add Found Item</DialogTitle>
-          <DialogDescription>Step {step} of 3 - {step === 1 ? 'Upload Photo' : step === 2 ? 'Item Details' : 'Review'}</DialogDescription>
+          <DialogDescription>
+            Step {step} of 4 - {step === 1 ? 'Upload Photo' : step === 2 ? 'Found Location' : step === 3 ? 'Item Details' : 'Review'}
+          </DialogDescription>
         </DialogHeader>
 
         {step === 1 && (
@@ -686,7 +742,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
                     </>
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      Phone upload received. You can now analyze this image or continue.
+                      Phone upload received. Analysis is running in the background.
                     </p>
                   )}
                 </div>
@@ -695,27 +751,52 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
 
             <div className="flex gap-3 justify-end pt-4">
               <Button variant="outline" onClick={() => handleOpenChange(false)}>Cancel</Button>
-              {formData.imagePreview ? (
-                analysisDone ? (
-                  <Button onClick={handleNext}>Continue <ChevronRight className="w-4 h-4 ml-2" /></Button>
-                ) : (
-                  <>
-                    <Button type="button" variant="ghost" size="sm" onClick={handleNext}>
-                      Skip
-                    </Button>
-                    <Button type="button" onClick={handleAnalyzeImage} disabled={uploading || analyzing || !formData.imageUrl || analysisDone}>
-                      {analyzing ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" />Waiting</>) : 'Analyze'}
-                    </Button>
-                  </>
-                )
-              ) : (
-                <Button onClick={handleNext}>Skip <ChevronRight className="w-4 h-4 ml-2" /></Button>
-              )}
+              <Button onClick={handleNext} disabled={!formData.imagePreview || uploading}>
+                Continue <ChevronRight className="w-4 h-4 ml-2" />
+              </Button>
             </div>
           </div>
         )}
 
         {step === 2 && (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="foundLocationStep2" className="text-sm font-medium">Found Location *</Label>
+              <Input
+                id="foundLocationStep2"
+                required
+                placeholder="e.g., Main entrance"
+                value={formData.foundLocation}
+                onChange={(e) => setFormData((p) => ({ ...p, foundLocation: e.target.value }))}
+                className="bg-background border-border/50"
+              />
+            </div>
+
+            <div className="rounded-lg border border-border/50 bg-muted/20 p-4">
+              <p className="text-xs text-muted-foreground">
+                Status: {analyzing ? 'Analyzing image...' : analysisDone ? 'Analysis ready' : 'Waiting for analysis...'}
+              </p>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-4">
+              <Button variant="outline" onClick={handleBack}><ChevronLeft className="w-4 h-4 mr-2" />Back</Button>
+              <Button type="button" variant="ghost" onClick={() => setStep(3)}>
+                Skip
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSimulatedAnalyze}
+                disabled={!formData.foundLocation.trim() || simulatingAnalyze || analyzeGateStarted}
+              >
+                {simulatingAnalyze || analyzeGateStarted
+                  ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analyzing...</>)
+                  : 'Analyze'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -808,25 +889,14 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
           </div>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <div className="space-y-6">
-            <div className="bg-muted/30 rounded-lg p-4 border border-border/50">
-              <div className="flex items-start gap-3">
-                <Checkbox id="highValue" checked={formData.highValue} onCheckedChange={(checked) => setFormData((p) => ({ ...p, highValue: checked as boolean }))} className="mt-1" />
-                <div className="flex-1">
-                  <Label htmlFor="highValue" className="font-medium cursor-pointer">Mark as High Value / Personal Information</Label>
-                  <p className="text-sm text-muted-foreground mt-1">Check this box if the item contains sensitive information or has significant monetary value. This will flag it for special handling.</p>
-                </div>
-              </div>
-            </div>
-
             <div className="bg-card rounded-lg p-4 border border-border/50">
               <h4 className="font-semibold text-sm mb-3">Summary</h4>
               <div className="space-y-2 text-sm">
                 <div><span className="text-muted-foreground">Name:</span> <span className="font-medium">{formData.name}</span></div>
                 <div><span className="text-muted-foreground">Category:</span> <span className="font-medium">{categoryLabels[formData.category]}</span></div>
                 {formData.imagePreview && <div><span className="text-muted-foreground">Photo:</span> <span className="font-medium">Yes</span></div>}
-                {formData.highValue && <div><span className="text-destructive">High Value Item</span></div>}
                 <div><span className="text-muted-foreground">Show in catalog:</span> <span className="font-medium">{formData.showInPublicCatalog ? 'Yes' : 'No (hidden)'}</span></div>
               </div>
             </div>

@@ -15,7 +15,8 @@ import {
   getUserLostReports,
   createLostItemReport,
   deleteLostItemReport,
-  findPotentialMatches,
+  getUserReportPotentialMatches,
+  removeUserPotentialMatch,
   LostItemReportRow,
 } from '../../lib/database';
 
@@ -85,6 +86,20 @@ export default function UserDashboard() {
   const [loadingMatches, setLoadingMatches] = useState(false);
   const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
 
+  const formatPotentialMatches = (reportId: string, potentialMatches: any[]): Match[] => {
+    const availableMatches = potentialMatches.filter(
+      (row: any) => String(row?.foundItem?.status ?? '').toLowerCase() === 'available'
+    );
+
+    return availableMatches.map((row: any) => ({
+      id: String(row.matchId ?? `match-${reportId}-${row.foundItemId}`),
+      lostItemId: String(row.reportId ?? reportId),
+      foundItemId: String(row.foundItemId),
+      confidence: Number.isFinite(Number(row.confidence)) ? Number(row.confidence) : 50,
+      foundItem: dbFoundItemToFoundItem(row.foundItem),
+    }));
+  };
+
   // Load user and their reports on mount
   useEffect(() => {
     async function load() {
@@ -105,57 +120,52 @@ export default function UserDashboard() {
     load();
   }, []);
 
-  // Load matches when a report is selected
+  // Preload matches for all reports once reports are loaded (no click-triggered fetches).
   useEffect(() => {
-    if (!selectedReport) return;
+    if (!user || lostItems.length === 0) return;
 
-    // Check if we already have matches for this report
-    if (matches.has(selectedReport.id)) return;
+    const reportIdsToLoad = lostItems.map((item) => item.id).filter((id) => !matches.has(id));
+    if (reportIdsToLoad.length === 0) return;
 
-    async function loadMatches() {
-      if (!selectedReport) return;
+    let cancelled = false;
 
+    async function preloadMatches() {
       setLoadingMatches(true);
       try {
-        const lostItemData = {
-          item_name: selectedReport.name,
-          description: selectedReport.description,
-          category: selectedReport.category,
-          color: selectedReport.color,
-          lost_location: selectedReport.locationLost,
-        };
-
-        const potentialMatches = await findPotentialMatches(lostItemData);
-
-        const availableMatches = potentialMatches.filter(
-          (item: any) => String(item?.status ?? '').toLowerCase() === 'available'
+        const loaded = await Promise.all(
+          reportIdsToLoad.map(async (reportId) => {
+            const potentialMatches = await getUserReportPotentialMatches(reportId);
+            return [reportId, formatPotentialMatches(reportId, potentialMatches)] as const;
+          })
         );
 
-        const formattedMatches: Match[] = availableMatches
-          .map((item: any, index: number) => ({
-          id: `match-${selectedReport.id}-${index}`,
-          lostItemId: selectedReport.id,
-          foundItemId: item.id,
-          confidence: Math.round(item.matchScore * 100),
-          foundItem: dbFoundItemToFoundItem(item),
-          }))
-          .filter((match) => match.confidence >= 45);
+        if (cancelled) return;
 
-        setMatches(prev => new Map(prev).set(selectedReport.id, formattedMatches));
+        setMatches((prev) => {
+          const next = new Map(prev);
+          for (const [reportId, reportMatches] of loaded) {
+            next.set(reportId, reportMatches);
+          }
+          return next;
+        });
       } catch (err) {
-        console.error('Failed to load matches:', err);
+        if (cancelled) return;
+        console.error('[UserDashboard.preloadMatches] failed', err);
         toast({
           title: 'Error',
           description: 'Failed to load potential matches',
           variant: 'destructive',
         });
       } finally {
-        setLoadingMatches(false);
+        if (!cancelled) setLoadingMatches(false);
       }
     }
 
-    loadMatches();
-  }, [selectedReport, matches]);
+    void preloadMatches();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, lostItems, matches]);
 
   const handleReportItem = async (data: {
     name: string;
@@ -245,6 +255,34 @@ export default function UserDashboard() {
       });
     } finally {
       setDeletingReportId(null);
+    }
+  };
+
+  const handleNotMine = async (match: Match) => {
+    try {
+      await removeUserPotentialMatch(match.lostItemId, match.foundItemId);
+
+      setMatches((prev) => {
+        const next = new Map(prev);
+        const current = next.get(match.lostItemId) ?? [];
+        next.set(
+          match.lostItemId,
+          current.filter((m) => m.foundItemId !== match.foundItemId)
+        );
+        return next;
+      });
+
+      toast({
+        title: 'Match removed',
+        description: 'This item will no longer appear as a potential match.',
+      });
+    } catch (err: any) {
+      console.error('Failed to remove potential match:', err);
+      toast({
+        title: 'Error',
+        description: err?.message ?? 'Failed to remove potential match',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -455,11 +493,11 @@ export default function UserDashboard() {
                         {/* Expanded Matches */}
                         {isSelected && (
                           <div className="ml-4 pl-4 border-l-2 border-primary/30 space-y-3 animate-fade-in">
-                            {loadingMatches ? (
+                            {loadingMatches && !matches.has(item.id) ? (
                               <div className="py-6 text-center">
                                 <Loader2 className="w-8 h-8 mx-auto text-primary animate-spin mb-2" />
                                 <p className="text-sm text-muted-foreground">
-                                  Searching for matches...
+                                  Loading saved matches...
                                 </p>
                               </div>
                             ) : getMatchesForReport(item.id).length > 0 ? (
@@ -478,14 +516,14 @@ export default function UserDashboard() {
                                   </Button>
                                 </div>
                                 {getMatchesForReport(item.id).map((match) => (
-                                  <MatchCard key={match.id} match={match} />
+                                  <MatchCard key={match.id} match={match} onNotMine={handleNotMine} />
                                 ))}
                               </>
                             ) : (
                               <div className="py-6 text-center">
                                 <Search className="w-8 h-8 mx-auto text-muted-foreground/40 mb-2" />
                                 <p className="text-sm text-muted-foreground">
-                                  No matches found yet. We're still searching!
+                                  No saved matches yet.
                                 </p>
                               </div>
                             )}

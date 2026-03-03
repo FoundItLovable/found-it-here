@@ -820,6 +820,411 @@ app.post("/api/admin/potential-matches/update", async (req, res) => {
   }
 });
 
+app.post("/api/admin/found-items/delete", async (req, res) => {
+  try {
+    if (!serverSupabase) {
+      return res.status(500).json({ error: "Server Supabase client is not configured" });
+    }
+
+    const authHeader = String(req.headers.authorization ?? "");
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+    if (!token) {
+      return res.status(401).json({ error: "Missing bearer token" });
+    }
+
+    const { data: authData, error: authError } = await serverSupabase.auth.getUser(token);
+    if (authError || !authData?.user) {
+      return res.status(401).json({ error: "Invalid auth token" });
+    }
+
+    const callerId = String(authData.user.id ?? "").trim();
+    const { data: callerProfile, error: callerError } = await serverSupabase
+      .from("profiles")
+      .select("id, role, organization_id")
+      .eq("id", callerId)
+      .single();
+    if (callerError) {
+      return res.status(403).json({ error: `Could not load caller profile: ${callerError.message}` });
+    }
+
+    const callerRole = String((callerProfile as any)?.role ?? "").toLowerCase();
+    if (!["staff", "admin", "owner"].includes(callerRole)) {
+      return res.status(403).json({ error: "Only staff/admin/owner can delete found items" });
+    }
+
+    const foundItemId = String(req.body?.foundItemId ?? "").trim();
+    const actor = String(req.body?.actor ?? "").toLowerCase();
+    if (!foundItemId) {
+      return res.status(400).json({ error: "Missing required field: foundItemId" });
+    }
+    if (actor !== "admin") {
+      return res.status(400).json({ error: "actor must be 'admin'" });
+    }
+
+    const { data: foundItemData, error: foundItemError } = await serverSupabase
+      .from("found_items")
+      .select("id, office_id")
+      .eq("id", foundItemId)
+      .single();
+    if (foundItemError) {
+      return res.status(404).json({ error: `Found item not found: ${foundItemError.message}` });
+    }
+
+    const officeId = String((foundItemData as any)?.office_id ?? "").trim();
+    if (!officeId) {
+      return res.status(400).json({ error: "Found item has no office_id" });
+    }
+
+    const { data: officeData, error: officeError } = await serverSupabase
+      .from("offices")
+      .select("organization_id")
+      .eq("office_id", officeId)
+      .single();
+    if (officeError) {
+      return res.status(400).json({ error: `Could not resolve office organization: ${officeError.message}` });
+    }
+
+    const organizationId = String((officeData as any)?.organization_id ?? "").trim();
+    if (!organizationId) {
+      return res.status(400).json({ error: "Found item office has no organization_id" });
+    }
+
+    if (String((callerProfile as any)?.organization_id ?? "").trim() !== organizationId) {
+      return res.status(403).json({ error: "Caller is not in the same organization as the found item office" });
+    }
+
+    const { data: deletedMatches, error: deleteMatchesError } = await serverSupabase
+      .from("potential_matches")
+      .delete()
+      .eq("lost_item_id", foundItemId)
+      .select("match_id");
+    if (deleteMatchesError) {
+      return res.status(500).json({ error: `Failed to delete related potential matches: ${deleteMatchesError.message}` });
+    }
+
+    const { data: deletedItem, error: deleteItemError } = await serverSupabase
+      .from("found_items")
+      .delete()
+      .eq("id", foundItemId)
+      .select("*")
+      .single();
+    if (deleteItemError) {
+      return res.status(500).json({ error: `Failed to delete found item: ${deleteItemError.message}` });
+    }
+
+    return res.json({
+      ok: true,
+      foundItemId,
+      organizationId,
+      deletedPotentialMatchCount: (deletedMatches ?? []).length,
+      deletedItem,
+    });
+  } catch (err: any) {
+    console.error("admin found item delete error:", err?.stack ?? err?.message ?? err);
+    return res.status(500).json({ error: err?.message ?? "Failed to delete found item" });
+  }
+});
+
+app.post("/api/user/potential-matches/update", async (req, res) => {
+  try {
+    if (!serverSupabase) {
+      return res.status(500).json({ error: "Server Supabase client is not configured" });
+    }
+
+    const authHeader = String(req.headers.authorization ?? "");
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+    if (!token) {
+      return res.status(401).json({ error: "Missing bearer token" });
+    }
+
+    const { data: authData, error: authError } = await serverSupabase.auth.getUser(token);
+    if (authError || !authData?.user) {
+      return res.status(401).json({ error: "Invalid auth token" });
+    }
+
+    const userId = String(authData.user.id ?? "").trim();
+    const reportId = String(req.body?.reportId ?? "").trim();
+    if (!reportId) {
+      return res.status(400).json({ error: "Missing required field: reportId" });
+    }
+
+    const { data: reportData, error: reportError } = await serverSupabase
+      .from("lost_item_reports")
+      .select("id, student_id")
+      .eq("id", reportId)
+      .single();
+    if (reportError) {
+      return res.status(404).json({ error: `Lost report not found: ${reportError.message}` });
+    }
+
+    const report = reportData as MatchableLostReport;
+    if (String(report.student_id ?? "").trim() !== userId) {
+      return res.status(403).json({ error: "You can only update matches for your own reports" });
+    }
+
+    const { data: profileData, error: profileError } = await serverSupabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", userId)
+      .single();
+    if (profileError) {
+      return res.status(400).json({ error: `Could not load user profile: ${profileError.message}` });
+    }
+
+    const organizationId = String((profileData as any)?.organization_id ?? "").trim();
+    if (!organizationId) {
+      return res.json({
+        ok: true,
+        reportId,
+        organizationId: null,
+        foundItemCount: 0,
+        keptCount: 0,
+        insertedCount: 0,
+        reason: "user has no organization_id",
+      });
+    }
+
+    const { data: orgOffices, error: officesError } = await serverSupabase
+      .from("offices")
+      .select("office_id")
+      .eq("organization_id", organizationId);
+    if (officesError) {
+      return res.status(500).json({ error: `Failed to query organization offices: ${officesError.message}` });
+    }
+
+    const officeIds = (orgOffices ?? [])
+      .map((row: any) => String(row?.office_id ?? "").trim())
+      .filter(Boolean);
+
+    if (officeIds.length === 0) {
+      const { error: clearError } = await serverSupabase
+        .from("potential_matches")
+        .delete()
+        .eq("report_id", reportId);
+      if (clearError) {
+        return res.status(500).json({ error: `Failed to clear existing matches: ${clearError.message}` });
+      }
+
+      return res.json({
+        ok: true,
+        reportId,
+        organizationId,
+        foundItemCount: 0,
+        keptCount: 0,
+        insertedCount: 0,
+      });
+    }
+
+    const { data: foundItemsData, error: foundItemsError } = await serverSupabase
+      .from("found_items")
+      .select("id, office_id, item_name, description, category, brand, color, found_location, status")
+      .in("office_id", officeIds)
+      .eq("status", "available");
+    if (foundItemsError) {
+      return res.status(500).json({ error: `Failed to query found items: ${foundItemsError.message}` });
+    }
+
+    const foundItems = (foundItemsData ?? []) as MatchableFoundItem[];
+    const scored = foundItems
+      .map((item) => ({ foundItem: item, matchScore: calculateMatchScore(report, item) }))
+      .filter((row) => row.matchScore >= MATCH_THRESHOLD)
+      .sort((a, b) => b.matchScore - a.matchScore)
+      .slice(0, MATCH_LIMIT);
+
+    const { error: clearError } = await serverSupabase
+      .from("potential_matches")
+      .delete()
+      .eq("report_id", reportId);
+    if (clearError) {
+      return res.status(500).json({ error: `Failed to clear existing matches: ${clearError.message}` });
+    }
+
+    let insertedCount = 0;
+    if (scored.length > 0) {
+      const rowsToInsert = scored.map((row) => ({
+        report_id: reportId,
+        lost_item_id: String(row.foundItem.id),
+      }));
+
+      const { data: insertedRows, error: insertError } = await serverSupabase
+        .from("potential_matches")
+        .insert(rowsToInsert)
+        .select("match_id");
+      if (insertError) {
+        return res.status(500).json({ error: `Failed to insert potential matches: ${insertError.message}` });
+      }
+      insertedCount = (insertedRows ?? []).length;
+    }
+
+    return res.json({
+      ok: true,
+      reportId,
+      organizationId,
+      foundItemCount: foundItems.length,
+      keptCount: scored.length,
+      insertedCount,
+    });
+  } catch (err: any) {
+    console.error("user potential match update error:", err?.stack ?? err?.message ?? err);
+    return res.status(500).json({ error: err?.message ?? "Failed to update potential matches" });
+  }
+});
+
+app.get("/api/user/potential-matches", async (req, res) => {
+  try {
+    if (!serverSupabase) {
+      return res.status(500).json({ error: "Server Supabase client is not configured" });
+    }
+
+    const authHeader = String(req.headers.authorization ?? "");
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+    if (!token) {
+      return res.status(401).json({ error: "Missing bearer token" });
+    }
+
+    const { data: authData, error: authError } = await serverSupabase.auth.getUser(token);
+    if (authError || !authData?.user) {
+      return res.status(401).json({ error: "Invalid auth token" });
+    }
+
+    const userId = String(authData.user.id ?? "").trim();
+    const reportId = String(req.query.reportId ?? "").trim();
+    if (!reportId) {
+      return res.status(400).json({ error: "Missing required query param: reportId" });
+    }
+
+    const { data: reportData, error: reportError } = await serverSupabase
+      .from("lost_item_reports")
+      .select("id, student_id, item_name, description, category, brand, color, lost_location, status")
+      .eq("id", reportId)
+      .single();
+    if (reportError) {
+      return res.status(404).json({ error: `Lost report not found: ${reportError.message}` });
+    }
+    if (String((reportData as any)?.student_id ?? "").trim() !== userId) {
+      return res.status(403).json({ error: "You can only read matches for your own reports" });
+    }
+    const { data: pmRows, error: pmError } = await serverSupabase
+      .from("potential_matches")
+      .select("match_id, report_id, lost_item_id")
+      .eq("report_id", reportId);
+    if (pmError) {
+      return res.status(500).json({ error: `Failed to load potential matches: ${pmError.message}` });
+    }
+
+    const foundItemIds = Array.from(
+      new Set((pmRows ?? []).map((row: any) => String(row?.lost_item_id ?? "").trim()).filter(Boolean))
+    );
+
+    if (foundItemIds.length === 0) {
+      return res.json({ ok: true, reportId, matches: [] });
+    }
+
+    const { data: foundItemsData, error: foundItemsError } = await serverSupabase
+      .from("found_items")
+      .select(
+        `
+        *,
+        staff:profiles!staff_id(
+          full_name,
+          office:offices!office_id(
+            office_id,
+            office_name,
+            building_name,
+            office_address
+          )
+        )
+      `
+      )
+      .in("id", foundItemIds);
+    if (foundItemsError) {
+      return res.status(500).json({ error: `Failed to load matched found items: ${foundItemsError.message}` });
+    }
+
+    const foundById = new Map(
+      (foundItemsData ?? []).map((item: any) => [String(item.id), item] as const)
+    );
+
+    const matches = (pmRows ?? [])
+      .map((pm: any) => {
+        const foundItemId = String(pm?.lost_item_id ?? "");
+        const foundItem = foundById.get(foundItemId);
+        if (!foundItem) return null;
+        return {
+          matchId: String(pm?.match_id ?? `${reportId}:${foundItemId}`),
+          reportId: String(pm?.report_id ?? reportId),
+          foundItemId,
+          foundItem,
+        };
+      })
+      .filter(Boolean);
+
+    return res.json({ ok: true, reportId, matches });
+  } catch (err: any) {
+    console.error("user potential match fetch error:", err?.stack ?? err?.message ?? err);
+    return res.status(500).json({ error: err?.message ?? "Failed to load potential matches" });
+  }
+});
+
+app.post("/api/user/lost-reports/delete", async (req, res) => {
+  try {
+    if (!serverSupabase) {
+      return res.status(500).json({ error: "Server Supabase client is not configured" });
+    }
+
+    const authHeader = String(req.headers.authorization ?? "");
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+    if (!token) {
+      return res.status(401).json({ error: "Missing bearer token" });
+    }
+
+    const { data: authData, error: authError } = await serverSupabase.auth.getUser(token);
+    if (authError || !authData?.user) {
+      return res.status(401).json({ error: "Invalid auth token" });
+    }
+
+    const userId = String(authData.user.id ?? "").trim();
+    const reportId = String(req.body?.reportId ?? "").trim();
+    if (!reportId) {
+      return res.status(400).json({ error: "Missing required field: reportId" });
+    }
+
+    const { data: reportData, error: reportError } = await serverSupabase
+      .from("lost_item_reports")
+      .select("id, student_id")
+      .eq("id", reportId)
+      .single();
+    if (reportError) {
+      return res.status(404).json({ error: `Lost report not found: ${reportError.message}` });
+    }
+    if (String((reportData as any)?.student_id ?? "").trim() !== userId) {
+      return res.status(403).json({ error: "You can only delete your own reports" });
+    }
+
+    const { error: deleteMatchesError } = await serverSupabase
+      .from("potential_matches")
+      .delete()
+      .eq("report_id", reportId);
+    if (deleteMatchesError) {
+      return res.status(500).json({ error: `Failed to delete report potential matches: ${deleteMatchesError.message}` });
+    }
+
+    const { error: deleteReportError } = await serverSupabase
+      .from("lost_item_reports")
+      .delete()
+      .eq("id", reportId)
+      .eq("student_id", userId);
+    if (deleteReportError) {
+      return res.status(500).json({ error: `Failed to delete report: ${deleteReportError.message}` });
+    }
+
+    return res.json({ ok: true, reportId });
+  } catch (err: any) {
+    console.error("user report delete error:", err?.stack ?? err?.message ?? err);
+    return res.status(500).json({ error: err?.message ?? "Failed to delete report" });
+  }
+});
+
 // Friendly root route so visiting http://localhost:5050 shows a helpful message
 app.get("/", (_req, res) => {
   res.send(
