@@ -455,6 +455,48 @@ app.post("/api/upload-sessions/:sessionId/consume", async (req, res) => {
   return res.json({ ok: true, status: session.status });
 });
 
+// Public offices list for campus map (no auth required)
+app.get("/api/offices", async (_req, res) => {
+  try {
+    if (!serverSupabase) {
+      return res.json([]);
+    }
+    const { data, error } = await serverSupabase
+      .from("offices")
+      .select("office_id, office_name, building_name, office_address")
+      .order("office_name");
+    if (error) {
+      console.error("offices list error:", error);
+      return res.json([]);
+    }
+    return res.json(data ?? []);
+  } catch (err: unknown) {
+    console.error("offices list error:", err);
+    return res.json([]);
+  }
+});
+
+// Public stats endpoint for reunited ticker (no auth required)
+app.get("/api/stats/reunited", async (_req, res) => {
+  try {
+    if (!serverSupabase) {
+      return res.json({ count: 0 });
+    }
+    const { count, error } = await serverSupabase
+      .from("found_items")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "returned");
+    if (error) {
+      console.error("reunited stats error:", error);
+      return res.json({ count: 0 });
+    }
+    return res.json({ count: count ?? 0 });
+  } catch (err: unknown) {
+    console.error("reunited stats error:", err);
+    return res.json({ count: 0 });
+  }
+});
+
 // Friendly root route so visiting http://localhost:5050 shows a helpful message
 app.get("/", (_req, res) => {
   res.send(

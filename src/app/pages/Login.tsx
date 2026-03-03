@@ -1,10 +1,14 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
 import { signIn, getCurrentUserWithProfile } from "../../lib/auth";
+
+// Swap this URL to change the login hero image (use /login-hero.jpg for a local image in public/)
+const LOGIN_HERO_IMAGE =
+  "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=1200";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "@/hooks/use-toast";
 import { Logo } from "@/components/Logo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Mail, Lock } from "lucide-react";
 
 const loginSchema = z.object({
@@ -23,6 +28,8 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: string })?.from ?? "/dashboard";
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<LoginFormData>({
@@ -46,7 +53,7 @@ export default function Login() {
       console.log("User role:", role);
 
       if (role === "staff") navigate("/admin");
-      else navigate("/dashboard");
+      else navigate(from);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Invalid email or password";
       console.error("Login error:", err);
@@ -62,72 +69,95 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden">
+      {/* Full-bleed background image */}
+      <img
+        src={LOGIN_HERO_IMAGE}
+        alt=""
+        className="absolute inset-0 w-full h-full object-cover"
+        aria-hidden
+      />
+      {/* Gradient overlay for readability and depth */}
+      <div
+        className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/50 to-black/70"
+        aria-hidden
+      />
+      {/* Soft ambient blobs (matches Signup) */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
+        <div className="absolute top-1/4 left-1/4 w-80 h-80 bg-primary/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/3 right-1/4 w-72 h-72 bg-primary/5 rounded-full blur-3xl" />
       </div>
 
-      <Card className="w-full max-w-md glass-card relative z-10">
-        <CardHeader className="text-center space-y-4">
-          <div className="flex justify-center">
-            <Logo />
-          </div>
-          <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
-          <CardDescription>Sign in to your FoundIt account</CardDescription>
-        </CardHeader>
+      <div className="absolute top-4 right-4 md:top-6 md:right-6 z-20">
+        <ThemeToggle />
+      </div>
 
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input type="email" placeholder="your.name@colorado.edu" className="pl-10" {...field} />
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+      <div className="relative z-10 w-full flex flex-col items-center justify-center p-4 md:p-8 min-h-screen overflow-y-auto">
+        <Card className="w-full max-w-md glass-card shadow-2xl animate-fade-in bg-card/95 backdrop-blur-xl">
+          <CardHeader className="text-center space-y-4 pb-2">
+            <div className="flex justify-center">
+              <Logo to="/" />
+            </div>
+            <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
+            <CardDescription>Sign in to your FoundIt account</CardDescription>
+          </CardHeader>
 
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input type="password" placeholder="••••••••" className="pl-10" {...field} />
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input type="email" placeholder="your.name@colorado.edu" className="pl-10" {...field} />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <Button type="submit" variant="hero" size="lg" className="w-full" disabled={isLoading}>
-                {isLoading ? "Signing in..." : "Sign In"}
-              </Button>
+                <FormField
+                  control={form.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input type="password" placeholder="••••••••" className="pl-10" {...field} />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <p className="text-center text-sm text-muted-foreground">
-                Don't have an account?{" "}
-                <Link to="/signup" className="text-primary hover:underline font-medium">
-                  Create one
-                </Link>
-              </p>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
+                <Button type="submit" variant="hero" size="lg" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Signing in..." : "Sign In"}
+                </Button>
+
+                <p className="text-center text-sm text-muted-foreground">
+                  Don't have an account?{" "}
+                  <Link to="/signup" className="text-primary hover:underline font-medium">
+                    Create one
+                  </Link>
+                </p>
+              </form>
+            </Form>
+          </CardContent>
+        </Card>
+
+        <p className="mt-6 text-center text-sm text-white/80 drop-shadow-sm">
+          University of Colorado Boulder
+        </p>
+      </div>
     </div>
   );
 }
