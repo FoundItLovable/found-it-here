@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
-import { Calendar, MoreVertical, Eye, EyeOff, CheckCircle, Trash2 } from "lucide-react";
+import { Calendar, MoreVertical, Eye, EyeOff, CheckCircle, Trash2, Pencil } from "lucide-react";
 
 interface AdminItemCardProps {
   item: FoundItem;
@@ -104,7 +104,10 @@ export function AdminItemCard({ item, onEdit, onClose, onCancel, onView, onToggl
                     View Details
                   </DropdownMenuItem>
 
-                  {/* Edit removed per request */}
+                  <DropdownMenuItem onClick={() => onEdit(item)}>
+                    <Pencil className="w-4 h-4 mr-2" />
+                    Edit
+                  </DropdownMenuItem>
 
                   <DropdownMenuItem
                     onClick={() => onClose(item)}
