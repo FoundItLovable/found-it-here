@@ -14,7 +14,10 @@ import {
 import type { ClaimRow, LostItemReportRow } from "../../lib/database";
 
 import { Logo } from "@/components/Logo";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { AdminDashboardSkeleton } from "@/components/skeletons/AdminDashboardSkeleton";
 import { AdminItemCard } from "@/components/admin/AdminItemCard";
+import { InventoryMapView } from "@/components/admin/InventoryMapView";
 import { AddItemModal } from "@/components/admin/AddItemModal";
 import { EditItemModal } from "@/components/admin/EditItemModal";
 import { MetricsPanel } from "@/components/admin/MetricsPanel";
@@ -23,7 +26,7 @@ import { toast } from "@/hooks/use-toast";
 import {
   Search, Package, Plus, ArrowLeft, Grid3X3, BarChart3,
   ListFilter, CheckCircle, XCircle, Clock,
-  MapPin, Calendar, User
+  MapPin, Calendar, User, Map, LayoutGrid
 } from 'lucide-react';
 
 import { Button } from "@/components/ui/button";
@@ -37,6 +40,8 @@ import { Switch } from "@/components/ui/switch";
 
 import type { FoundItem, ItemFormData } from "@/types";
 import { categoryLabels } from "@/types";
+import { useTypewriterPlaceholder } from "@/hooks/useTypewriterPlaceholder";
+import confetti from "canvas-confetti";
 
 
 
@@ -72,6 +77,8 @@ function rowToFoundItem(row: any, profile: any): FoundItem {
     color: row?.color ?? undefined,
     brand: row?.brand ?? undefined,
     showInPublicCatalog: row?.show_in_public_catalog !== false,
+    latitude: row?.latitude != null ? Number(row.latitude) : undefined,
+    longitude: row?.longitude != null ? Number(row.longitude) : undefined,
   };
 }
 
@@ -85,6 +92,14 @@ export default function AdminDashboard() {
   const [currentOffice, setCurrentOffice] = useState({ name: "" });
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const searchPlaceholder = useTypewriterPlaceholder([
+    "AirPods",
+    "Keys",
+    "North Face backpack",
+    "iPhone",
+    "Wallet",
+    "Laptop charger",
+  ]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   const [selectedItem, setSelectedItem] = useState<FoundItem | null>(null);
@@ -211,7 +226,7 @@ export default function AdminDashboard() {
     return filtered;
   }, [items, searchQuery, categoryFilter, statusFilter, sortBy]);
 
-  async function handleCreate(data: ItemFormData & { highValue?: boolean; showInPublicCatalog?: boolean }) {
+  async function handleCreate(data: ItemFormData & { highValue?: boolean; showInPublicCatalog?: boolean; latitude?: number | null; longitude?: number | null }) {
     try {
 
       // Your DB expects found_items columns (item_name, found_location, etc.)
@@ -228,6 +243,8 @@ export default function AdminDashboard() {
         high_value: data.highValue ? true : false,
         show_in_public_catalog: data.showInPublicCatalog !== false,
         status: "available",
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
       });
 
       const userWithProfile: any = await getCurrentUserWithProfile();
@@ -269,6 +286,12 @@ export default function AdminDashboard() {
       await updateFoundItem(item.id, { status: "returned" });
       setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, status: "returned" } : x)));
       toast({ title: "Marked returned", description: `${item.name} is now returned.` });
+      confetti({
+        particleCount: 80,
+        spread: 60,
+        origin: { y: 0.7 },
+        colors: ["hsl(82, 85%, 55%)", "hsl(82, 85%, 45%)", "hsl(0, 0%, 100%)"],
+      });
     } catch (err: any) {
       console.error(err);
       toast({
@@ -383,31 +406,13 @@ export default function AdminDashboard() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-background">
-        <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
-          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/">
-                <Button variant="ghost" size="icon" className="hover:bg-secondary">
-                  <ArrowLeft className="w-5 h-5" />
-                </Button>
-              </Link>
-              <Logo size="sm" />
-              <Badge variant="outline" className="hidden sm:flex text-xs">
-                Admin
-              </Badge>
-            </div>
-          </div>
-        </header>
-      </div>
-    );
+    return <AdminDashboardSkeleton />;
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[#f8f9fa] dark:bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
+      <header className="sticky top-0 z-50 border-b border-white/20 bg-background/40 backdrop-blur-2xl shadow-lg shadow-black/5">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link to="/">
@@ -415,12 +420,13 @@ export default function AdminDashboard() {
                 <ArrowLeft className="w-5 h-5" />
               </Button>
             </Link>
-            <Logo size="sm" />
+            <Logo size="sm" to="/admin" />
             <Badge variant="outline" className="hidden sm:flex text-xs">
               Admin
             </Badge>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <ThemeToggle />
             <MapPin className="w-4 h-4 text-primary" />
             <span className="hidden sm:inline">{currentOffice.name}</span>
             <Button
@@ -490,10 +496,10 @@ export default function AdminDashboard() {
         </div>
       </section>
 
-      {/* Main Content */}
+      {/* Main Content - off-white background for floating card effect */}
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="inventory" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-3 bg-muted/50">
+          <TabsList className="grid w-full max-w-md grid-cols-3 bg-background/40 backdrop-blur-md border border-white/10">
             <TabsTrigger value="inventory" className="flex items-center gap-2 data-[state=active]:bg-background">
               <Grid3X3 className="w-4 h-4" />
               Inventory
@@ -511,12 +517,33 @@ export default function AdminDashboard() {
           </TabsList>
 
           <TabsContent value="inventory" className="space-y-6">
-            {/* Filters */}
+            {/* Filters - sticky with glassmorphism */}
+            <div className="sticky top-16 z-40 -mx-4 px-4 py-3 -mt-3 pt-3 mb-3 border-b border-white/10 bg-background/30 backdrop-blur-xl shadow-sm">
             <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant={inventoryView === 'grid' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setInventoryView('grid')}
+                  className="h-9"
+                >
+                  <LayoutGrid className="w-4 h-4 mr-1.5" />
+                  Grid
+                </Button>
+                <Button
+                  variant={inventoryView === 'map' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setInventoryView('map')}
+                  className="h-9"
+                >
+                  <Map className="w-4 h-4 mr-1.5" />
+                  Map
+                </Button>
+              </div>
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search items..."
+                  placeholder={searchPlaceholder}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9 bg-background border-border/50"
@@ -557,9 +584,19 @@ export default function AdminDashboard() {
                 </Select>
               </div>
             </div>
+            </div>
 
-            {/* Items Grid */}
-            {filteredItems.length > 0 ? (
+            {/* Items Grid or Map */}
+            {inventoryView === 'map' ? (
+              <InventoryMapView
+                items={filteredItems}
+                onEdit={handleEdit}
+                onClose={handleClose}
+                onCancel={handleCancel}
+                onView={handleView}
+                onToggleCatalogVisibility={handleToggleCatalogVisibility}
+              />
+            ) : filteredItems.length > 0 ? (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredItems.map((item) => (
                   <AdminItemCard
@@ -657,6 +694,7 @@ export default function AdminDashboard() {
                           handleToggleCatalogVisibility(selectedItem);
                           setSelectedItem((prev) => prev ? { ...prev, showInPublicCatalog: !prev.showInPublicCatalog } : null);
                         }}
+                        className="scale-90"
                       />
                     </div>
                   )}

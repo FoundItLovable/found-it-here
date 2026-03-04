@@ -198,7 +198,7 @@ export function MetricsPanel({ items, claims, lostReports }: MetricsPanelProps) 
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  {avgTimeToReturn !== null ? formatDuration(avgTimeToReturn) : 'N/A'}
+                  {avgTimeToReturn !== null ? formatDuration(avgTimeToReturn) : 'No Items Returned'}
                 </p>
                 <p className="text-xs text-muted-foreground">Avg Time to Return</p>
               </div>

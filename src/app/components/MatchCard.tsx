@@ -1,16 +1,22 @@
+import { useState } from 'react';
 import { Match, categoryIcons } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, Calendar, Navigation, CheckCircle2 } from 'lucide-react';
+import { MapPin, Calendar, Navigation, Bookmark } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface MatchCardProps {
   match: Match;
+  isWatched?: boolean;
+  onToggleWatch?: () => void;
+  onViewDetails?: () => void;
   onNotMine?: (match: Match) => void | Promise<void>;
 }
 
-export function MatchCard({ match, onNotMine }: MatchCardProps) {
+export function MatchCard({ match, isWatched, onToggleWatch, onViewDetails, onNotMine }: MatchCardProps) {
   const { foundItem, confidence } = match;
+  const [isBouncing, setIsBouncing] = useState(false);
 
   const getConfidenceStyle = (conf: number) => {
     if (conf >= 90) return 'bg-primary text-primary-foreground';
@@ -18,8 +24,21 @@ export function MatchCard({ match, onNotMine }: MatchCardProps) {
     return 'bg-muted text-muted-foreground';
   };
 
+  const handleBookmarkClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleWatch?.();
+    setIsBouncing(true);
+    setTimeout(() => setIsBouncing(false), 400);
+  };
+
   return (
-    <Card className="overflow-hidden border-border/50 bg-card hover:border-primary/40 transition-all duration-200 hover:shadow-lg">
+    <Card
+      className={cn(
+        "overflow-hidden border-border/50 bg-card hover:border-primary/40 hover:-translate-y-1 hover:shadow-xl transition-all duration-200 ease-out cursor-pointer",
+        onViewDetails && "cursor-pointer"
+      )}
+      onClick={onViewDetails}
+    >
       <CardContent className="p-0">
         <div className="flex flex-col sm:flex-row">
           {/* Image Section */}
@@ -38,6 +57,26 @@ export function MatchCard({ match, onNotMine }: MatchCardProps) {
             <Badge className={`absolute top-2 right-2 ${getConfidenceStyle(confidence)} text-xs font-semibold`}>
               {confidence}%
             </Badge>
+            {onToggleWatch && (
+              <button
+                type="button"
+                onClick={handleBookmarkClick}
+                className={cn(
+                  "absolute top-2 left-2 p-1.5 rounded-full bg-background/90 backdrop-blur-sm border border-border/50 shadow-sm transition-colors",
+                  "hover:bg-primary/20 hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/50",
+                  isWatched ? "text-primary fill-primary" : "text-muted-foreground hover:text-primary"
+                )}
+                title={isWatched ? "Unwatch" : "Watch this item"}
+              >
+                <Bookmark
+                  className={cn(
+                    "w-4 h-4 transition-transform duration-200",
+                    isBouncing && "animate-bookmark-pop"
+                  )}
+                  fill={isWatched ? "currentColor" : "none"}
+                />
+              </button>
+            )}
           </div>
 
           {/* Content Section */}
@@ -66,7 +105,7 @@ export function MatchCard({ match, onNotMine }: MatchCardProps) {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
               <Button size="sm" className="flex-1">
                 <Navigation className="w-3.5 h-3.5" />
                 Get Directions
