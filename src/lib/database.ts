@@ -17,7 +17,6 @@ export type FoundItemStatus = "available" | "claimed" | string;
 export interface FoundItemRow {
   id: string;
   office_id?: string;
-  staff_id?: string;
   item_name?: string | null;
   description?: string | null;
   category?: string | null;
@@ -117,22 +116,7 @@ export const getOffice = async (officeId: string): Promise<OfficeRow> => {
 export const getFoundItems = async (limit = 20, offset = 0): Promise<FoundItemRow[]> => {
   const { data, error } = await supabase
     .from("found_items")
-    .select(
-      `
-      *,
-      staff:profiles!staff_id(
-        full_name,
-        email,
-        phone_number,
-        office:offices!office_id(
-          office_id,
-          office_name,
-          building_name,
-          office_address
-        )
-      )
-    `
-    )
+    .select("*")
     .eq("status", "available")
     .eq("show_in_public_catalog", true)
     .order("created_at", { ascending: false })
@@ -166,15 +150,7 @@ export const searchFoundItems = async (
 ): Promise<FoundItemRow[]> => {
   let query = supabase
     .from("found_items")
-    .select(
-      `
-      *,
-      staff:profiles!staff_id(
-        full_name,
-        office:offices!office_id(office_name, building_name)
-      )
-    `
-    )
+    .select("*")
     .eq("status", "available")
     .eq("show_in_public_catalog", true);
 
@@ -251,22 +227,7 @@ export const getPublicCatalogItems = async (
 export const getFoundItem = async (itemId: string): Promise<FoundItemRow> => {
   const { data, error } = await supabase
     .from("found_items")
-    .select(
-      `
-      *,
-      staff:profiles!staff_id(
-        full_name,
-        email,
-        phone_number,
-        office:offices!office_id(
-          office_id,
-          office_name,
-          building_name,
-          office_address
-        )
-      )
-    `
-    )
+    .select("*")
     .eq("id", itemId)
     .single();
 
@@ -986,14 +947,11 @@ export const findPotentialMatches = async (lostItemData: Partial<LostItemReportR
     .select(
       `
       *,
-      staff:profiles!staff_id(
-        full_name,
-        office:offices!office_id(
-          office_id,
-          office_name,
-          building_name,
-          office_address
-        )
+      office:offices!office_id(
+        office_id,
+        office_name,
+        building_name,
+        office_address
       )
     `
     )

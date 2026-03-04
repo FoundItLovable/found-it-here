@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { supabase } from '../../lib/supabase';
 
 export function ReunitedTicker() {
   const [count, setCount] = useState<number | null>(null);
@@ -6,9 +7,11 @@ export function ReunitedTicker() {
   useEffect(() => {
     const fetchCount = async () => {
       try {
-        const res = await fetch('/api/stats/reunited');
-        const data = await res.json();
-        setCount(typeof data?.count === 'number' ? data.count : 0);
+        const { count: reunited } = await supabase
+          .from('found_items')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'returned');
+        setCount(reunited ?? 0);
       } catch {
         setCount(0);
       }

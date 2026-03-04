@@ -160,7 +160,7 @@ const calculateKeywordSimilarity = (desc1: string, desc2: string): number => {
   if (!desc1 || !desc2) return 0;
 
   const stop = new Set([
-    "the","and","for","are","but","not","you","all","can","had","her","was","one","our","out","day","get","has","him","his","how","man","new","now","old","see","two","way","who","boy","did","its","let","put","say","she","too","use",
+    "the", "and", "for", "are", "but", "not", "you", "all", "can", "had", "her", "was", "one", "our", "out", "day", "get", "has", "him", "his", "how", "man", "new", "now", "old", "see", "two", "way", "who", "boy", "did", "its", "let", "put", "say", "she", "too", "use",
   ]);
 
   const extractKeywords = (text: string) =>
