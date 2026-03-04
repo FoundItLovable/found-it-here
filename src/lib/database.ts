@@ -669,14 +669,11 @@ export const findPotentialMatches = async (lostItemData: Partial<LostItemReportR
     .select(
       `
       *,
-      staff:profiles!staff_id(
-        full_name,
-        office:offices!office_id(
-          office_id,
-          office_name,
-          building_name,
-          office_address
-        )
+      office:offices!office_id(
+        office_id,
+        office_name,
+        building_name,
+        office_address
       )
     `
     )
