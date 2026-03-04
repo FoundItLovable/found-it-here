@@ -502,7 +502,7 @@ export const getClaimsForItem = async (foundItemId: string): Promise<any[]> => {
     .select(
       `
       *,
-      student:profiles!student_id(
+      student:profiles!claimant_id(
         full_name,
         email,
         phone_number,
@@ -669,11 +669,14 @@ export const findPotentialMatches = async (lostItemData: Partial<LostItemReportR
     .select(
       `
       *,
-      office:offices!office_id(
-        office_id,
-        office_name,
-        building_name,
-        office_address
+      staff:profiles!staff_id(
+        full_name,
+        office:offices!office_id(
+          office_id,
+          office_name,
+          building_name,
+          office_address
+        )
       )
     `
     )
