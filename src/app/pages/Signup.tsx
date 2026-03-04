@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "@/hooks/use-toast";
 import { Logo } from "@/components/Logo";
+import { useLogoDestination } from "@/hooks/useLogoDestination";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Mail, Lock, User, Phone, IdCard } from "lucide-react";
 
@@ -35,6 +36,7 @@ type OrganizationOption = { organization_id: string; name: string };
 
 export default function Signup() {
   const navigate = useNavigate();
+  const logoTo = useLogoDestination();
   const [isLoading, setIsLoading] = useState(false);
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
   const [orgLoading, setOrgLoading] = useState(true);
@@ -132,7 +134,7 @@ export default function Signup() {
       <Card className="w-full max-w-md glass-card relative z-10">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
-            <Logo to="/" />
+            <Logo to={logoTo} />
           </div>
           <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
           <CardDescription>Sign up for a FoundIt account</CardDescription>

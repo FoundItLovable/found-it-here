@@ -40,6 +40,7 @@ import { Switch } from "@/components/ui/switch";
 import type { FoundItem, ItemFormData } from "@/types";
 import { categoryLabels } from "@/types";
 import { useTypewriterPlaceholder } from "@/hooks/useTypewriterPlaceholder";
+import { useLogoDestination } from "@/hooks/useLogoDestination";
 import confetti from "canvas-confetti";
 
 
@@ -83,6 +84,7 @@ function rowToFoundItem(row: any, profile: any): FoundItem {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const logoTo = useLogoDestination();
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<FoundItem[]>([]);
@@ -340,7 +342,7 @@ export default function AdminDashboard() {
                 <ArrowLeft className="w-5 h-5" />
               </Button>
             </Link>
-            <Logo size="sm" to="/admin" />
+            <Logo size="sm" to={logoTo} />
             <Badge variant="outline" className="hidden sm:flex text-xs">
               Admin
             </Badge>
