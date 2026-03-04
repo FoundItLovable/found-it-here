@@ -7,7 +7,7 @@ export interface LostItem {
   dateLost: string;
   locationLost: string;
   imageUrl?: string;
-  status: 'searching' | 'matched' | 'claimed';
+  status: 'searching' | 'matched' | 'claimed' | 'recovered';
   userId: string;
   createdAt: string;
 }
@@ -24,12 +24,15 @@ export interface FoundItem {
   officeId: string;
   officeName: string;
   officeLocation: string;
+  foundLocation?: string;
   checkedInBy: string;
   createdAt: string;
   updatedAt?: string;
   color?: string;
   brand?: string;
   showInPublicCatalog?: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface ItemFormData {

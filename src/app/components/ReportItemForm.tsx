@@ -18,7 +18,8 @@ interface ReportItemFormProps {
     locationLost: string;
     color?: string;
     brand?: string;
-  }) => void;
+  }) => void | Promise<void>;
+  onSuccess?: () => void;
 }
 
 const normalizeColorList = (value: string): string =>
@@ -32,7 +33,7 @@ const normalizeColorList = (value: string): string =>
     )
   ).join(",");
 
-export function ReportItemForm({ onSubmit }: ReportItemFormProps) {
+export function ReportItemForm({ onSubmit, onSuccess }: ReportItemFormProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<ItemCategory>('other');
@@ -42,9 +43,9 @@ export function ReportItemForm({ onSubmit }: ReportItemFormProps) {
   const [brand, setBrand] = useState('');
   const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!name.trim() || !description.trim() || !dateLost || !locationLost.trim()) {
       toast({
         title: 'Missing information',
@@ -55,21 +56,24 @@ export function ReportItemForm({ onSubmit }: ReportItemFormProps) {
     }
 
     const cleanedColor = normalizeColorList(color);
-    onSubmit({ name, description, category, dateLost, locationLost, color: cleanedColor || undefined, brand: brand.trim() || undefined });
+    const data = { name, description, category, dateLost, locationLost, color: cleanedColor || undefined, brand: brand.trim() || undefined };
 
-    // Reset form
-    setName('');
-    setDescription('');
-    setCategory('other');
-    setDateLost('');
-    setLocationLost('');
-    setColor('');
-    setBrand('');
+    try {
+      await Promise.resolve(onSubmit(data));
 
-    toast({
-      title: 'Item reported!',
-      description: "We'll search our database and notify you of any matches.",
-    });
+      // Reset form on success
+      setName('');
+      setDescription('');
+      setCategory('other');
+      setDateLost('');
+      setLocationLost('');
+      setColor('');
+      setBrand('');
+
+      onSuccess?.();
+    } catch {
+      // Parent handles error toast; don't reset form
+    }
   };
 
   return (

@@ -29,64 +29,62 @@ export function AdminItemCard({ item, onEdit, onClose, onCancel, onView, onToggl
   const badgeClass = statusStyles[item.status] ?? statusStyles.available;
 
   return (
-    <Card className="overflow-hidden border-border/50 bg-card hover:border-primary/40 transition-all duration-200 group">
+    <Card className="overflow-hidden rounded-xl border-0 bg-card shadow-[0_2px_12px_rgba(0,0,0,0.06)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-200 ease-out group">
       <CardContent className="p-0">
-        <div className="flex gap-3">
-          {/* Image */}
-          <div className="relative w-20 h-20 flex-shrink-0 bg-muted rounded-lg overflow-hidden m-3">
-            {item.imageUrl ? (
-              <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-2xl text-muted-foreground">
-                {categoryIcons[item.category]}
-              </div>
-            )}
-          </div>
+        {/* Hero image - stretches across top half, edge-to-edge */}
+        <div className="relative w-full aspect-[4/3] bg-muted/50 overflow-hidden">
+          {item.imageUrl ? (
+            <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted/80 to-muted/40">
+              <span className="text-4xl text-muted-foreground/70">{categoryIcons[item.category]}</span>
+            </div>
+          )}
+        </div>
 
-          {/* Content */}
-          <div className="flex-1 py-3 pr-3 min-w-0">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <h3 className="font-semibold text-foreground truncate">{item.name}</h3>
-                <p className="text-xs text-muted-foreground truncate">{item.description}</p>
-              </div>
-
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                {item.showInPublicCatalog === false && (
-                  <Badge variant="secondary" className="text-xs bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">
-                    <EyeOff className="w-3 h-3 mr-0.5" />
-                    Hidden
-                  </Badge>
-                )}
-                <Badge variant="outline" className={`${badgeClass} text-xs capitalize`}>
-                  {item.status}
-                </Badge>
-              </div>
+        {/* Content */}
+        <div className="p-3 sm:p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <h3 className="font-semibold text-foreground truncate">{item.name}</h3>
+              <p className="text-xs text-muted-foreground truncate mt-0.5">{item.description}</p>
             </div>
 
-            <div className="flex items-center justify-between mt-2">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Badge variant="secondary" className="text-xs bg-secondary/80">
-                  {categoryLabels[item.category]}
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {item.showInPublicCatalog === false && (
+                <Badge variant="secondary" className="text-xs bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">
+                  <EyeOff className="w-3 h-3 mr-0.5" />
+                  Hidden
                 </Badge>
-                <span className="flex items-center gap-1">
-                  <Calendar className="w-3 h-3" />
-                  {new Date(item.dateFound).toLocaleDateString()}
-                </span>
-              </div>
+              )}
+              <Badge variant="outline" className={`${badgeClass} text-xs capitalize`}>
+                {item.status}
+              </Badge>
+            </div>
+          </div>
 
-              <div className="flex items-center gap-2">
-                {item.status === "available" && onToggleCatalogVisibility && (
-                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                    <span className="text-xs text-muted-foreground hidden sm:inline">Catalog</span>
-                    <Switch
-                      checked={item.showInPublicCatalog !== false}
-                      onCheckedChange={() => onToggleCatalogVisibility(item)}
-                      className="scale-75"
-                    />
-                  </div>
-                )}
+          <div className="flex items-center justify-between mt-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Badge variant="secondary" className="text-xs bg-secondary/80">
+                {categoryLabels[item.category]}
+              </Badge>
+              <span className="flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                {new Date(item.dateFound).toLocaleDateString()}
+              </span>
+            </div>
 
+            <div className="flex items-center gap-2">
+              {item.status === "available" && onToggleCatalogVisibility && (
+                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  <span className="text-xs text-muted-foreground hidden sm:inline">Catalog</span>
+                  <Switch
+                    checked={item.showInPublicCatalog !== false}
+                    onCheckedChange={() => onToggleCatalogVisibility(item)}
+                    className="scale-[0.7]"
+                  />
+                </div>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -97,7 +95,6 @@ export function AdminItemCard({ item, onEdit, onClose, onCancel, onView, onToggl
                     <MoreVertical className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
-
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => onView(item)}>
                     <Eye className="w-4 h-4 mr-2" />
@@ -117,7 +114,6 @@ export function AdminItemCard({ item, onEdit, onClose, onCancel, onView, onToggl
                     <CheckCircle className="w-4 h-4 mr-2" />
                     Mark Returned
                   </DropdownMenuItem>
-
                   <DropdownMenuItem
                     onClick={() => onCancel(item)}
                     disabled={item.status !== "available"}
@@ -128,7 +124,6 @@ export function AdminItemCard({ item, onEdit, onClose, onCancel, onView, onToggl
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              </div>
             </div>
           </div>
         </div>

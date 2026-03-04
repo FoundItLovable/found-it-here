@@ -13,6 +13,7 @@ import { deleteImage, uploadImage } from '../../.././lib/database';
 import { mapCategory } from '../../data/categoryMap';
 import { shouldDefaultHidden } from '@/lib/catalogVisibility';
 import { Switch } from '@/components/ui/switch';
+import { MapPinPicker } from './MapPinPicker';
 
 interface AddItemModalProps {
   open: boolean;
@@ -42,6 +43,8 @@ interface AddItemModalProps {
     foundDate?: string;
     highValue?: boolean;
     showInPublicCatalog?: boolean;
+    latitude?: number | null;
+    longitude?: number | null;
   }) => Promise<void> | void;
 }
 
@@ -79,6 +82,8 @@ const initialFormState = () => ({
   foundDate: todayLocalISO(),
   highValue: false,
   showInPublicCatalog: true,
+  latitude: null as number | null,
+  longitude: null as number | null,
 });
 
 // Browsers can't render HEIC/HEIF; allow only PNG/JPEG
@@ -435,6 +440,8 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
         foundDate: formData.foundDate,
         highValue: formData.highValue,
         showInPublicCatalog: formData.showInPublicCatalog,
+        latitude: formData.latitude ?? undefined,
+        longitude: formData.longitude ?? undefined,
       });
       handleOpenChange(false, { keepImage: true });
     } catch (e) {
@@ -866,6 +873,22 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
                   value={formData.foundDate}
                   onChange={(e) => setFormData((p) => ({ ...p, foundDate: e.target.value }))}
                   className="bg-background border-border/50"
+                />
+              </div>
+
+              <div className="col-span-2">
+                <MapPinPicker
+                  latitude={formData.latitude}
+                  longitude={formData.longitude}
+                  onSelect={(lat, lng, address) => {
+                    setFormData((p) => ({
+                      ...p,
+                      latitude: lat,
+                      longitude: lng,
+                      foundLocation: address || p.foundLocation || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+                    }));
+                  }}
+                  onClear={() => setFormData((p) => ({ ...p, latitude: null, longitude: null }))}
                 />
               </div>
 

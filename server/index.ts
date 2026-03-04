@@ -950,7 +950,7 @@ app.post("/api/user/potential-matches/update", async (req, res) => {
 
     const { data: reportData, error: reportError } = await serverSupabase
       .from("lost_item_reports")
-      .select("id, student_id")
+      .select("id, student_id, item_name, description, category, brand, color, lost_location, status")
       .eq("id", reportId)
       .single();
     if (reportError) {
@@ -964,14 +964,28 @@ app.post("/api/user/potential-matches/update", async (req, res) => {
 
     const { data: profileData, error: profileError } = await serverSupabase
       .from("profiles")
-      .select("organization_id")
+      .select("organization_id, office_id")
       .eq("id", userId)
       .single();
     if (profileError) {
       return res.status(400).json({ error: `Could not load user profile: ${profileError.message}` });
     }
 
-    const organizationId = String((profileData as any)?.organization_id ?? "").trim();
+    let organizationId = String((profileData as any)?.organization_id ?? "").trim();
+    if (!organizationId) {
+      const profileOfficeId = String((profileData as any)?.office_id ?? "").trim();
+      if (profileOfficeId) {
+        const { data: officeData, error: officeError } = await serverSupabase
+          .from("offices")
+          .select("organization_id")
+          .eq("office_id", profileOfficeId)
+          .single();
+        if (officeError) {
+          return res.status(400).json({ error: `Could not resolve organization from user office: ${officeError.message}` });
+        }
+        organizationId = String((officeData as any)?.organization_id ?? "").trim();
+      }
+    }
     if (!organizationId) {
       return res.json({
         ok: true,
@@ -1222,6 +1236,48 @@ app.post("/api/user/lost-reports/delete", async (req, res) => {
   } catch (err: any) {
     console.error("user report delete error:", err?.stack ?? err?.message ?? err);
     return res.status(500).json({ error: err?.message ?? "Failed to delete report" });
+  }
+});
+
+// Public offices list for campus map (no auth required)
+app.get("/api/offices", async (_req, res) => {
+  try {
+    if (!serverSupabase) {
+      return res.json([]);
+    }
+    const { data, error } = await serverSupabase
+      .from("offices")
+      .select("office_id, office_name, building_name, office_address")
+      .order("office_name");
+    if (error) {
+      console.error("offices list error:", error);
+      return res.json([]);
+    }
+    return res.json(data ?? []);
+  } catch (err: unknown) {
+    console.error("offices list error:", err);
+    return res.json([]);
+  }
+});
+
+// Public stats endpoint for reunited ticker (no auth required)
+app.get("/api/stats/reunited", async (_req, res) => {
+  try {
+    if (!serverSupabase) {
+      return res.json({ count: 0 });
+    }
+    const { count, error } = await serverSupabase
+      .from("found_items")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "returned");
+    if (error) {
+      console.error("reunited stats error:", error);
+      return res.json({ count: 0 });
+    }
+    return res.json({ count: count ?? 0 });
+  } catch (err: unknown) {
+    console.error("reunited stats error:", err);
+    return res.json({ count: 0 });
   }
 });
 
