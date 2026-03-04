@@ -1,6 +1,6 @@
 -- =============================================================================
 -- SUPABASE SCHEMA — Full dump from remote database
--- Last updated: 2026-02-17
+-- Last updated: 2026-03-03 (regenerated from supabase db dump)
 -- =============================================================================
 
 -- Extensions
@@ -27,7 +27,6 @@ CREATE TABLE IF NOT EXISTS "public"."organizations" (
     "settings" "jsonb" DEFAULT '{}'::"jsonb",
     "created_at" timestamp with time zone DEFAULT "now"(),
     "updated_at" timestamp with time zone DEFAULT "now"(),
-    CONSTRAINT "organizations_pkey" PRIMARY KEY ("organization_id"),
     CONSTRAINT "organizations_name_not_empty" CHECK (("char_length"("name") > 0))
 );
 
@@ -37,7 +36,8 @@ CREATE TABLE IF NOT EXISTS "public"."offices" (
     "building_name" character varying,
     "office_id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "organization_id" "uuid",
-    CONSTRAINT "offices_pkey" PRIMARY KEY ("office_id")
+    "lat" double precision,
+    "lng" double precision
 );
 
 COMMENT ON TABLE "public"."offices" IS 'contains physical office information';
@@ -46,6 +46,8 @@ COMMENT ON COLUMN "public"."offices"."office_address" IS 'Office mailing address
 COMMENT ON COLUMN "public"."offices"."building_name" IS 'Building name or campus building';
 COMMENT ON COLUMN "public"."offices"."office_id" IS 'Primary key (uuid) for office; referenced by profiles.office_id';
 COMMENT ON COLUMN "public"."offices"."organization_id" IS 'Foreign key to organizations table (if present); groups offices by organization';
+COMMENT ON COLUMN "public"."offices"."lat" IS 'Latitude for map display';
+COMMENT ON COLUMN "public"."offices"."lng" IS 'Longitude for map display';
 
 CREATE TABLE IF NOT EXISTS "public"."profiles" (
     "id" "uuid" NOT NULL,
@@ -59,8 +61,6 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
     "updated_at" timestamp with time zone DEFAULT "now"(),
     "organization_id" "uuid",
     "role" "text",
-    CONSTRAINT "profiles_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "profiles_email_key" UNIQUE ("email"),
     CONSTRAINT "profiles_role_check" CHECK (("role" = ANY (ARRAY['admin'::"text", 'owner'::"text", 'staff'::"text", 'user'::"text"])))
 );
 
@@ -76,9 +76,11 @@ COMMENT ON COLUMN "public"."profiles"."updated_at" IS 'Profile last-updated time
 COMMENT ON COLUMN "public"."profiles"."organization_id" IS 'Foreign key to organizations table; groups users by organization';
 COMMENT ON COLUMN "public"."profiles"."role" IS 'User role within the organization (e.g., admin, user)';
 
+-- NOTE: found_items uses office_id (not staff_id) to associate items with an office.
+-- Do NOT use staff_id — that column does not exist in the remote DB.
 CREATE TABLE IF NOT EXISTS "public"."found_items" (
     "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
-    "staff_id" "uuid" NOT NULL,
+    "office_id" "uuid" NOT NULL,
     "item_name" "text" NOT NULL,
     "category" "text" NOT NULL,
     "description" "text" NOT NULL,
@@ -94,12 +96,14 @@ CREATE TABLE IF NOT EXISTS "public"."found_items" (
     "updated_at" timestamp with time zone DEFAULT "now"(),
     "high_value" boolean DEFAULT false NOT NULL,
     "show_in_public_catalog" boolean DEFAULT true NOT NULL,
-    CONSTRAINT "found_items_pkey" PRIMARY KEY ("id"),
+    "latitude" double precision,
+    "longitude" double precision,
     CONSTRAINT "found_items_status_check" CHECK (("status" = ANY (ARRAY['available'::"text", 'claimed'::"text", 'returned'::"text"])))
 );
 
 COMMENT ON COLUMN "public"."found_items"."high_value" IS 'Labels an item as high value';
-COMMENT ON COLUMN "public"."found_items"."show_in_public_catalog" IS 'When true, item appears in public browse/search. When false, hidden from catalog but still included in lost-item matching.';
+COMMENT ON COLUMN "public"."found_items"."latitude" IS 'Latitude of found location (optional, for map display)';
+COMMENT ON COLUMN "public"."found_items"."longitude" IS 'Longitude of found location (optional, for map display)';
 
 CREATE TABLE IF NOT EXISTS "public"."lost_item_reports" (
     "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
@@ -116,9 +120,13 @@ CREATE TABLE IF NOT EXISTS "public"."lost_item_reports" (
     "status" "text" DEFAULT 'active'::"text" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"(),
     "updated_at" timestamp with time zone DEFAULT "now"(),
-    CONSTRAINT "lost_item_reports_pkey" PRIMARY KEY ("id"),
+    "latitude" double precision,
+    "longitude" double precision,
     CONSTRAINT "lost_item_reports_status_check" CHECK (("status" = ANY (ARRAY['active'::"text", 'found'::"text", 'cancelled'::"text"])))
 );
+
+COMMENT ON COLUMN "public"."lost_item_reports"."latitude" IS 'Latitude of lost location (optional, for map display)';
+COMMENT ON COLUMN "public"."lost_item_reports"."longitude" IS 'Longitude of lost location (optional, for map display)';
 
 CREATE TABLE IF NOT EXISTS "public"."claims" (
     "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
@@ -134,8 +142,6 @@ CREATE TABLE IF NOT EXISTS "public"."claims" (
     "picked_up_at" timestamp with time zone,
     "created_at" timestamp with time zone DEFAULT "now"(),
     "updated_at" timestamp with time zone DEFAULT "now"(),
-    CONSTRAINT "claims_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "claims_found_item_id_student_id_key" UNIQUE ("found_item_id", "claimant_id"),
     CONSTRAINT "claims_review_status_check" CHECK (("review_status" = ANY (ARRAY['pending'::"text", 'approved'::"text", 'rejected'::"text"])))
 );
 
@@ -148,8 +154,14 @@ CREATE TABLE IF NOT EXISTS "public"."notifications" (
     "related_item_id" "uuid",
     "related_item_type" "text",
     "is_read" boolean DEFAULT false,
-    "created_at" timestamp with time zone DEFAULT "now"(),
-    CONSTRAINT "notifications_pkey" PRIMARY KEY ("id")
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+-- potential_matches: stores pre-computed match pairs between lost reports and found items
+CREATE TABLE IF NOT EXISTS "public"."potential_matches" (
+    "report_id" "uuid" NOT NULL,
+    "lost_item_id" "uuid" NOT NULL,
+    "match_id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL
 );
 
 -- =============================================================================
@@ -158,15 +170,53 @@ CREATE TABLE IF NOT EXISTS "public"."notifications" (
 
 -- Replaces the former offices.item_count cached column.
 -- Usage: SELECT * FROM office_item_counts WHERE office_id = ?
-CREATE OR REPLACE VIEW "public"."office_item_counts" AS
-SELECT
-    o.office_id,
-    COUNT(CASE WHEN fi.status = 'available' THEN 1 END) AS available_item_count,
-    COUNT(fi.id) AS total_item_count
-FROM "public"."offices" o
-LEFT JOIN "public"."profiles" p ON p.office_id = o.office_id
-LEFT JOIN "public"."found_items" fi ON fi.staff_id = p.id
-GROUP BY o.office_id;
+-- Note: uses security_invoker so RLS applies based on the calling user's role.
+CREATE OR REPLACE VIEW "public"."office_item_counts" WITH ("security_invoker"='on') AS
+ SELECT "o"."office_id",
+    "count"(
+        CASE
+            WHEN ("fi"."status" = 'available'::"text") THEN 1
+            ELSE NULL::integer
+        END) AS "available_item_count",
+    "count"("fi"."id") AS "total_item_count"
+   FROM (("public"."offices" "o"
+     LEFT JOIN "public"."profiles" "p" ON (("p"."office_id" = "o"."office_id")))
+     LEFT JOIN "public"."found_items" "fi" ON (("fi"."office_id" = "p"."id")))
+  GROUP BY "o"."office_id";
+
+-- =============================================================================
+-- PRIMARY KEYS & UNIQUE CONSTRAINTS
+-- =============================================================================
+
+ALTER TABLE ONLY "public"."organizations"
+    ADD CONSTRAINT "organizations_pkey" PRIMARY KEY ("organization_id");
+
+ALTER TABLE ONLY "public"."offices"
+    ADD CONSTRAINT "offices_pkey" PRIMARY KEY ("office_id");
+
+ALTER TABLE ONLY "public"."profiles"
+    ADD CONSTRAINT "profiles_pkey" PRIMARY KEY ("id");
+
+ALTER TABLE ONLY "public"."profiles"
+    ADD CONSTRAINT "profiles_email_key" UNIQUE ("email");
+
+ALTER TABLE ONLY "public"."found_items"
+    ADD CONSTRAINT "found_items_pkey" PRIMARY KEY ("id");
+
+ALTER TABLE ONLY "public"."lost_item_reports"
+    ADD CONSTRAINT "lost_item_reports_pkey" PRIMARY KEY ("id");
+
+ALTER TABLE ONLY "public"."claims"
+    ADD CONSTRAINT "claims_pkey" PRIMARY KEY ("id");
+
+ALTER TABLE ONLY "public"."claims"
+    ADD CONSTRAINT "claims_found_item_id_student_id_key" UNIQUE ("found_item_id", "claimant_id");
+
+ALTER TABLE ONLY "public"."notifications"
+    ADD CONSTRAINT "notifications_pkey" PRIMARY KEY ("id");
+
+ALTER TABLE ONLY "public"."potential_matches"
+    ADD CONSTRAINT "potential_matches_pkey" PRIMARY KEY ("match_id");
 
 -- =============================================================================
 -- INDEXES
@@ -176,8 +226,10 @@ CREATE INDEX "idx_claims_found_item" ON "public"."claims" USING "btree" ("found_
 CREATE INDEX "idx_claims_status" ON "public"."claims" USING "btree" ("review_status");
 CREATE INDEX "idx_claims_student" ON "public"."claims" USING "btree" ("claimant_id");
 CREATE INDEX "idx_found_items_category" ON "public"."found_items" USING "btree" ("category");
+CREATE INDEX "idx_found_items_coords" ON "public"."found_items" USING "btree" ("latitude", "longitude") WHERE (("latitude" IS NOT NULL) AND ("longitude" IS NOT NULL));
 CREATE INDEX "idx_found_items_created_at" ON "public"."found_items" USING "btree" ("created_at" DESC);
 CREATE INDEX "idx_found_items_status" ON "public"."found_items" USING "btree" ("status");
+CREATE INDEX "idx_lost_item_reports_coords" ON "public"."lost_item_reports" USING "btree" ("latitude", "longitude") WHERE (("latitude" IS NOT NULL) AND ("longitude" IS NOT NULL));
 CREATE INDEX "idx_lost_reports_status" ON "public"."lost_item_reports" USING "btree" ("status");
 CREATE INDEX "idx_lost_reports_student" ON "public"."lost_item_reports" USING "btree" ("student_id");
 CREATE INDEX "idx_notifications_unread" ON "public"."notifications" USING "btree" ("user_id", "is_read") WHERE ("is_read" = false);
@@ -198,8 +250,9 @@ ALTER TABLE ONLY "public"."claims"
 ALTER TABLE ONLY "public"."claims"
     ADD CONSTRAINT "claims_reviewed_by_fkey" FOREIGN KEY ("reviewed_by") REFERENCES "public"."profiles"("id") ON DELETE SET NULL;
 
+-- found_items.office_id references offices (not profiles); no ON DELETE rule in remote DB
 ALTER TABLE ONLY "public"."found_items"
-    ADD CONSTRAINT "found_items_staff_id_fkey" FOREIGN KEY ("staff_id") REFERENCES "public"."profiles"("id") ON DELETE SET NULL;
+    ADD CONSTRAINT "found_items_office_id_fkey" FOREIGN KEY ("office_id") REFERENCES "public"."offices"("office_id");
 
 ALTER TABLE ONLY "public"."lost_item_reports"
     ADD CONSTRAINT "lost_item_reports_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
@@ -209,6 +262,12 @@ ALTER TABLE ONLY "public"."notifications"
 
 ALTER TABLE ONLY "public"."offices"
     ADD CONSTRAINT "offices_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("organization_id") ON UPDATE CASCADE ON DELETE SET NULL;
+
+ALTER TABLE ONLY "public"."potential_matches"
+    ADD CONSTRAINT "potential_matches_lost_item_id_fkey" FOREIGN KEY ("lost_item_id") REFERENCES "public"."found_items"("id");
+
+ALTER TABLE ONLY "public"."potential_matches"
+    ADD CONSTRAINT "potential_matches_report_id_fkey" FOREIGN KEY ("report_id") REFERENCES "public"."lost_item_reports"("id");
 
 ALTER TABLE ONLY "public"."profiles"
     ADD CONSTRAINT "profiles_id_fkey" FOREIGN KEY ("id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
@@ -224,17 +283,17 @@ ALTER TABLE ONLY "public"."profiles"
 -- =============================================================================
 
 -- Auto-create profile on signup
+-- Note: does NOT insert organization_id (that is set separately after signup)
 CREATE OR REPLACE FUNCTION "public"."handle_new_user"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
   BEGIN
-    INSERT INTO public.profiles (id, email, full_name, role, organization_id)
+    INSERT INTO public.profiles (id, email, full_name, role)
     VALUES (
       NEW.id,
       NEW.email,
       COALESCE(NEW.raw_user_meta_data->>'full_name', 'User'),
-      'user',
-      NULLIF(NEW.raw_user_meta_data->>'organization_id', '')::uuid
+      'user'
     );
     RETURN NEW;
   END;
@@ -258,23 +317,35 @@ DECLARE
   notification_id UUID;
 BEGIN
   INSERT INTO notifications (
-    user_id, title, message, notification_type, related_item_id, related_item_type
+    user_id,
+    title,
+    message,
+    notification_type,
+    related_item_id,
+    related_item_type
   ) VALUES (
-    p_user_id, p_title, p_message, p_notification_type, p_related_item_id, p_related_item_type
+    p_user_id,
+    p_title,
+    p_message,
+    p_notification_type,
+    p_related_item_id,
+    p_related_item_type
   )
   RETURNING id INTO notification_id;
+
   RETURN notification_id;
 END;
 $$;
 
 -- Notify claimant when their claim is reviewed
+-- Note: uses NEW.claimant_id (not NEW.student_id — that column doesn't exist on claims)
 CREATE OR REPLACE FUNCTION "public"."notify_claim_reviewed"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
 BEGIN
   IF (OLD.review_status = 'pending' AND NEW.review_status IN ('approved', 'rejected')) THEN
     PERFORM create_notification(
-      NEW.student_id,
+      NEW.claimant_id,
       CASE
         WHEN NEW.review_status = 'approved' THEN 'Claim Approved!'
         ELSE 'Claim Update'
@@ -299,8 +370,13 @@ CREATE OR REPLACE FUNCTION "public"."find_best_match"("p_category" "text", "p_co
 BEGIN
   RETURN QUERY
   SELECT
-    fi.id, fi.category, fi.color, fi.brand,
-    fi.found_location, fi.found_date, fi.current_location,
+    fi.id,
+    fi.category,
+    fi.color,
+    fi.brand,
+    fi.found_location,
+    fi.found_date,
+    fi.current_location,
     (
       CASE WHEN LOWER(fi.category) = LOWER(p_category) THEN 3 ELSE 0 END +
       CASE WHEN LOWER(fi.color) = LOWER(p_color) AND p_color IS NOT NULL THEN 2 ELSE 0 END +
@@ -324,7 +400,10 @@ BEGIN
   SELECT *
   FROM found_items
   WHERE status = 'available'
-    AND (search_category IS NULL OR category = search_category)
+    AND (
+      search_category IS NULL
+      OR category = search_category
+    )
     AND (
       item_name ILIKE '%' || search_query || '%'
       OR description ILIKE '%' || search_query || '%'
@@ -333,6 +412,19 @@ BEGIN
     )
   ORDER BY created_at DESC;
 END;
+$$;
+
+-- Return all lost reports from the caller's organization (staff/admin/owner only)
+CREATE OR REPLACE FUNCTION "public"."get_org_lost_reports"() RETURNS SETOF "public"."lost_item_reports"
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  select r.*
+  from public.lost_item_reports r
+  join public.profiles reporter on reporter.id = r.student_id
+  join public.profiles me on me.id = auth.uid()
+  where me.role = any (array['staff'::text,'admin'::text,'owner'::text])
+    and reporter.organization_id = me.organization_id;
 $$;
 
 -- =============================================================================
@@ -364,12 +456,14 @@ ALTER TABLE "public"."notifications" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."offices" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."organizations" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."profiles" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."potential_matches" ENABLE ROW LEVEL SECURITY;
 
 -- Found Items policies
 CREATE POLICY "found_items_select_all" ON "public"."found_items" FOR SELECT USING (true);
-CREATE POLICY "Anyone can view available found items" ON "public"."found_items" FOR SELECT USING ((("status" = 'available'::"text") OR ("auth"."uid"() = "staff_id")));
-CREATE POLICY "found_items_insert_safe" ON "public"."found_items" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() = "staff_id"));
-CREATE POLICY "Staff can update own found items" ON "public"."found_items" FOR UPDATE USING (("auth"."uid"() = "staff_id"));
+CREATE POLICY "Anyone can view available found items" ON "public"."found_items" FOR SELECT USING ((("status" = 'available'::"text") OR ("auth"."uid"() = "office_id")));
+-- Insert: caller must be staff/admin/owner and their office_id must match the item's office_id
+CREATE POLICY "found_items_insert_safe" ON "public"."found_items" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1 FROM "public"."profiles" "p" WHERE (("p"."id" = "auth"."uid"()) AND ("p"."role" = ANY (ARRAY['staff'::"text", 'admin'::"text", 'owner'::"text"])) AND ("p"."office_id" = "found_items"."office_id")))));
+CREATE POLICY "Staff can update own found items" ON "public"."found_items" FOR UPDATE USING (("auth"."uid"() = "office_id"));
 CREATE POLICY "found_items_update_staff" ON "public"."found_items" FOR UPDATE USING ((EXISTS ( SELECT 1 FROM "public"."profiles" WHERE (("profiles"."id" = "auth"."uid"()) AND ("profiles"."role" = 'staff'::"text")))));
 CREATE POLICY "found_items_delete_staff" ON "public"."found_items" FOR DELETE USING ((EXISTS ( SELECT 1 FROM "public"."profiles" WHERE (("profiles"."id" = "auth"."uid"()) AND ("profiles"."role" = 'staff'::"text")))));
 
@@ -378,10 +472,10 @@ CREATE POLICY "Users can create claims" ON "public"."claims" FOR INSERT WITH CHE
 CREATE POLICY "claims_insert_student" ON "public"."claims" FOR INSERT WITH CHECK (("auth"."uid"() = "claimant_id"));
 CREATE POLICY "Users can view own claims" ON "public"."claims" FOR SELECT USING (("auth"."uid"() = "claimant_id"));
 CREATE POLICY "claims_select_own_student" ON "public"."claims" FOR SELECT USING (("auth"."uid"() = "claimant_id"));
-CREATE POLICY "claims_select_safe" ON "public"."claims" FOR SELECT TO "authenticated" USING ((("auth"."uid"() = "claimant_id") OR ("auth"."uid"() IN ( SELECT "found_items"."staff_id" FROM "public"."found_items" WHERE ("found_items"."id" = "claims"."found_item_id")))));
-CREATE POLICY "Staff can view claims for their items" ON "public"."claims" FOR SELECT USING ((EXISTS ( SELECT 1 FROM "public"."found_items" WHERE (("found_items"."id" = "claims"."found_item_id") AND ("found_items"."staff_id" = "auth"."uid"())))));
-CREATE POLICY "Staff can update claims for their items" ON "public"."claims" FOR UPDATE USING ((EXISTS ( SELECT 1 FROM "public"."found_items" WHERE (("found_items"."id" = "claims"."found_item_id") AND ("found_items"."staff_id" = "auth"."uid"())))));
-CREATE POLICY "claims_update_safe" ON "public"."claims" FOR UPDATE TO "authenticated" USING (("auth"."uid"() IN ( SELECT "found_items"."staff_id" FROM "public"."found_items" WHERE ("found_items"."id" = "claims"."found_item_id"))));
+CREATE POLICY "claims_select_safe" ON "public"."claims" FOR SELECT TO "authenticated" USING ((("auth"."uid"() = "claimant_id") OR ("auth"."uid"() IN ( SELECT "found_items"."office_id" AS "staff_id" FROM "public"."found_items" WHERE ("found_items"."id" = "claims"."found_item_id")))));
+CREATE POLICY "Staff can view claims for their items" ON "public"."claims" FOR SELECT USING ((EXISTS ( SELECT 1 FROM "public"."found_items" WHERE (("found_items"."id" = "claims"."found_item_id") AND ("found_items"."office_id" = "auth"."uid"())))));
+CREATE POLICY "Staff can update claims for their items" ON "public"."claims" FOR UPDATE USING ((EXISTS ( SELECT 1 FROM "public"."found_items" WHERE (("found_items"."id" = "claims"."found_item_id") AND ("found_items"."office_id" = "auth"."uid"())))));
+CREATE POLICY "claims_update_safe" ON "public"."claims" FOR UPDATE TO "authenticated" USING (("auth"."uid"() IN ( SELECT "found_items"."office_id" AS "staff_id" FROM "public"."found_items" WHERE ("found_items"."id" = "claims"."found_item_id"))));
 CREATE POLICY "claims_update_own_pending" ON "public"."claims" FOR UPDATE USING ((("auth"."uid"() = "claimant_id") AND ("review_status" = 'pending'::"text")));
 CREATE POLICY "claims_delete_own_pending" ON "public"."claims" FOR DELETE USING ((("auth"."uid"() = "claimant_id") AND ("review_status" = 'pending'::"text")));
 
@@ -397,8 +491,8 @@ CREATE POLICY "Users can delete own lost reports" ON "public"."lost_item_reports
 CREATE POLICY "lost_reports_delete_own" ON "public"."lost_item_reports" FOR DELETE USING (("auth"."uid"() = "student_id"));
 CREATE POLICY "lost_reports_insert_own" ON "public"."lost_item_reports" FOR INSERT WITH CHECK (("auth"."uid"() = "student_id"));
 
--- Staff/admin/owner can view all lost reports (needed for metrics & matching)
-CREATE POLICY "staff_select_all_lost_reports" ON "public"."lost_item_reports" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1 FROM "public"."profiles" WHERE (("profiles"."id" = "auth"."uid"()) AND ("profiles"."role" = ANY (ARRAY['staff'::"text", 'admin'::"text", 'owner'::"text"]))))));
+-- Staff/admin/owner can view all lost reports within their organization (needed for metrics & matching)
+CREATE POLICY "staff_select_all_lost_reports" ON "public"."lost_item_reports" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1 FROM ("public"."profiles" "me" JOIN "public"."profiles" "reporter" ON (("reporter"."id" = "lost_item_reports"."student_id"))) WHERE (("me"."id" = "auth"."uid"()) AND ("me"."role" = ANY (ARRAY['staff'::"text", 'admin'::"text", 'owner'::"text"])) AND ("reporter"."organization_id" = "me"."organization_id")))));
 
 -- Notifications policies
 CREATE POLICY "notifications_select_own" ON "public"."notifications" FOR SELECT USING (("auth"."uid"() = "user_id"));
@@ -429,6 +523,11 @@ CREATE POLICY "offices_delete_same_office" ON "public"."offices" FOR DELETE USIN
 CREATE POLICY "users read only own org" ON "public"."organizations" FOR SELECT USING (("auth"."uid"() IN ( SELECT "profiles"."id" FROM "public"."profiles" WHERE ("profiles"."organization_id" = "organizations"."organization_id"))));
 CREATE POLICY "organizations_select_all_for_signup" ON "public"."organizations" FOR SELECT USING (true);
 
+-- Potential Matches policies
+CREATE POLICY "pm_select_user_own" ON "public"."potential_matches" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1 FROM "public"."lost_item_reports" "r" WHERE (("r"."id" = "potential_matches"."report_id") AND ("r"."student_id" = "auth"."uid"())))));
+CREATE POLICY "pm_insert_user_own" ON "public"."potential_matches" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1 FROM "public"."lost_item_reports" "r" WHERE (("r"."id" = "potential_matches"."report_id") AND ("r"."student_id" = "auth"."uid"())))));
+CREATE POLICY "pm_delete_user_own" ON "public"."potential_matches" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1 FROM "public"."lost_item_reports" "r" WHERE (("r"."id" = "potential_matches"."report_id") AND ("r"."student_id" = "auth"."uid"())))));
+
 -- =============================================================================
 -- REALTIME
 -- =============================================================================
@@ -455,9 +554,11 @@ GRANT ALL ON TABLE "public"."offices" TO "anon", "authenticated", "service_role"
 GRANT ALL ON TABLE "public"."organizations" TO "anon", "authenticated", "service_role";
 GRANT ALL ON TABLE "public"."profiles" TO "anon", "authenticated", "service_role";
 GRANT ALL ON TABLE "public"."office_item_counts" TO "anon", "authenticated", "service_role";
+GRANT ALL ON TABLE "public"."potential_matches" TO "anon", "authenticated", "service_role";
 
 GRANT ALL ON FUNCTION "public"."create_notification"("p_user_id" "uuid", "p_title" "text", "p_message" "text", "p_notification_type" "text", "p_related_item_id" "uuid", "p_related_item_type" "text") TO "anon", "authenticated", "service_role";
 GRANT ALL ON FUNCTION "public"."find_best_match"("p_category" "text", "p_color" "text", "p_brand" "text", "p_lost_location" "text", "p_lost_date" "date") TO "anon", "authenticated", "service_role";
+GRANT ALL ON FUNCTION "public"."get_org_lost_reports"() TO "anon", "authenticated", "service_role";
 GRANT ALL ON FUNCTION "public"."handle_new_user"() TO "anon", "authenticated", "service_role";
 GRANT ALL ON FUNCTION "public"."notify_claim_reviewed"() TO "anon", "authenticated", "service_role";
 GRANT ALL ON FUNCTION "public"."search_found_items"("search_query" "text", "search_category" "text") TO "anon", "authenticated", "service_role";
