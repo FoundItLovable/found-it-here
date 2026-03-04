@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { categoryLabels } from "../src/app/types";
+import { categoryLabels } from "../shared/categoryLabels";
 
 export type AnalyzeResult = {
   name: string;

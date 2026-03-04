@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: foundit-server
+    runtime: node
+    buildCommand: npm install && npx tsc --project tsconfig.server.json
+    startCommand: node dist/server/index.js
+    envVars:
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: PUBLIC_APP_URL
+        sync: false

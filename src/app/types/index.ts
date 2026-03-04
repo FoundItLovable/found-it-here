@@ -1,3 +1,7 @@
+import type { ItemCategory } from "../../../shared/categoryLabels";
+export type { ItemCategory } from "../../../shared/categoryLabels";
+export { categoryLabels } from "../../../shared/categoryLabels";
+
 export interface LostItem {
   id: string;
   name: string;
@@ -59,25 +63,6 @@ export interface Match {
   confidence: number;
   foundItem: FoundItem;
 }
-
-export type ItemCategory = 
-  | 'electronics'
-  | 'clothing'
-  | 'accessories'
-  | 'documents'
-  | 'keys'
-  | 'bags'
-  | 'other';
-
-export const categoryLabels: Record<ItemCategory, string> = {
-  electronics: 'Electronics',
-  clothing: 'Clothing',
-  accessories: 'Accessories',
-  documents: 'Documents',
-  keys: 'Keys',
-  bags: 'Bags & Luggage',
-  other: 'Other',
-};
 
 export const categoryIcons: Record<ItemCategory, string> = {
   electronics: '📱',
