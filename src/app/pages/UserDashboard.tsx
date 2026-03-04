@@ -510,10 +510,13 @@ export default function UserDashboard() {
                     return (
                       <div key={item.id} className="space-y-3">
                         {/* Report Card */}
-                        <button
+                        <div
+                          role="button"
+                          tabIndex={0}
                           onClick={() => setSelectedReport(isSelected ? null : item)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedReport(isSelected ? null : item); } }}
                           className={cn(
-                            "w-full text-left p-4 rounded-xl border transition-all duration-200 ease-out",
+                            "w-full text-left p-4 rounded-xl border transition-all duration-200 ease-out cursor-pointer",
                             "hover:shadow-lg hover:-translate-y-0.5 hover:border-primary/30",
                             isSelected
                               ? "bg-card border-primary shadow-md"
@@ -599,7 +602,7 @@ export default function UserDashboard() {
                               />
                             </div>
                           </div>
-                        </button>
+                        </div>
 
                         {/* Expanded Matches */}
                         {isSelected && (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MapPin, Building2 } from 'lucide-react';
 import { FadeInSection } from '@/components/FadeInSection';
+import { supabase } from '../../lib/supabase';
 
 interface Office {
   office_id: string;
@@ -16,9 +17,11 @@ export function OfficeLocationsMap() {
   useEffect(() => {
     const fetchOffices = async () => {
       try {
-        const res = await fetch('/api/offices');
-        const data = await res.json();
-        setOffices(Array.isArray(data) ? data : []);
+        const { data } = await supabase
+          .from('offices')
+          .select('office_id, office_name, building_name, office_address')
+          .order('office_name');
+        setOffices(data ?? []);
       } catch {
         setOffices([]);
       } finally {
