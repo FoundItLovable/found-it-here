@@ -186,6 +186,8 @@ export default function UserDashboard() {
         });
       } catch (err) {
         if (cancelled) return;
+        const message =
+        err instanceof Error ? err.message : String(err);
         console.error('[UserDashboard.preloadMatches] failed', err);
         toast({
           title: 'Error',

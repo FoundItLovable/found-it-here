@@ -513,8 +513,28 @@ export const getUserReportPotentialMatches = async (reportId: string): Promise<a
   const staffIds = Array.from(
     new Set((foundItems ?? []).map((row: any) => String(row?.staff_id ?? "").trim()).filter(Boolean))
   );
+  const foundItemOfficeIds = Array.from(
+    new Set((foundItems ?? []).map((row: any) => String(row?.office_id ?? "").trim()).filter(Boolean))
+  );
   let staffById = new Map<string, any>();
   let officeById = new Map<string, any>();
+
+  const loadOfficesByIds = async (officeIds: string[]) => {
+    if (officeIds.length === 0) return;
+    const { data: officeRows, error: officeError } = await supabase
+      .from("offices")
+      .select("office_id, office_name, building_name, office_address")
+      .in("office_id", officeIds);
+    if (officeError) {
+      console.error("[getUserReportPotentialMatches] office query failed", officeError);
+      throw officeError;
+    }
+    for (const row of officeRows ?? []) {
+      officeById.set(String((row as any)?.office_id ?? ""), row);
+    }
+  };
+
+  await loadOfficesByIds(foundItemOfficeIds);
 
   if (staffIds.length > 0) {
     const { data: staffRows, error: staffError } = await supabase
@@ -530,17 +550,7 @@ export const getUserReportPotentialMatches = async (reportId: string): Promise<a
       new Set((staffRows ?? []).map((row: any) => String(row?.office_id ?? "").trim()).filter(Boolean))
     );
 
-    if (officeIds.length > 0) {
-      const { data: officeRows, error: officeError } = await supabase
-        .from("offices")
-        .select("office_id, office_name, building_name, office_address")
-        .in("office_id", officeIds);
-      if (officeError) {
-        console.error("[getUserReportPotentialMatches] office query failed", officeError);
-        throw officeError;
-      }
-      officeById = new Map((officeRows ?? []).map((row: any) => [String(row.office_id), row] as const));
-    }
+    await loadOfficesByIds(officeIds);
 
     staffById = new Map(
       (staffRows ?? []).map((row: any) => [
@@ -558,6 +568,7 @@ export const getUserReportPotentialMatches = async (reportId: string): Promise<a
       String(row.id),
       {
         ...row,
+        office: officeById.get(String(row?.office_id ?? "")) ?? null,
         staff: staffById.get(String(row?.staff_id ?? "")) ?? null,
       },
     ] as const)
