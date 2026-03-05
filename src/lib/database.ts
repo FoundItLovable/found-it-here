@@ -473,7 +473,7 @@ export const getUserReportPotentialMatches = async (reportId: string): Promise<a
 
   const { data: matchRows, error: matchError } = await supabase
     .from("potential_matches")
-    .select("match_id, report_id, lost_item_id")
+    .select("match_id, report_id, lost_item_id, score")
     .eq("report_id", trimmedReportId);
   if (matchError) {
     console.error("[getUserReportPotentialMatches] potential_matches query failed", matchError);
@@ -571,6 +571,7 @@ export const getUserReportPotentialMatches = async (reportId: string): Promise<a
         matchId: String(row?.match_id ?? `${trimmedReportId}:${foundItemId}`),
         reportId: String(row?.report_id ?? trimmedReportId),
         foundItemId,
+        score: Number.isFinite(Number(row?.score)) ? Number(row.score) : null,
         foundItem,
       };
     })

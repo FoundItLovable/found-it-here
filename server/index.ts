@@ -744,6 +744,7 @@ app.post("/api/admin/potential-matches/update", async (req, res) => {
       const candidateRows = scored.map((row) => ({
         report_id: String(row.report.id),
         lost_item_id: foundItemId,
+        score: row.matchScore,
       }));
 
       const uniqueRows = Array.from(
@@ -1058,6 +1059,7 @@ app.post("/api/user/potential-matches/update", async (req, res) => {
       const rowsToInsert = scored.map((row) => ({
         report_id: reportId,
         lost_item_id: String(row.foundItem.id),
+        score: row.matchScore,
       }));
 
       const { data: insertedRows, error: insertError } = await serverSupabase

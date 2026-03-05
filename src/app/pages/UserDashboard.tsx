@@ -112,7 +112,11 @@ export default function UserDashboard() {
       id: String(row.matchId ?? `match-${reportId}-${row.foundItemId}`),
       lostItemId: String(row.reportId ?? reportId),
       foundItemId: String(row.foundItemId),
-      confidence: Number.isFinite(Number(row.confidence)) ? Number(row.confidence) : 50,
+      confidence: Number.isFinite(Number(row.confidence))
+        ? Number(row.confidence)
+        : Number.isFinite(Number(row.score))
+          ? Math.round(Number(row.score) * 100)
+          : 50,
       foundItem: dbFoundItemToFoundItem(row.foundItem),
     }));
   };

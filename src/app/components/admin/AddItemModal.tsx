@@ -114,15 +114,14 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisDone, setAnalysisDone] = useState(false);
+  const [step2AnalyzeStarted, setStep2AnalyzeStarted] = useState(false);
+  const [step2DelayDone, setStep2DelayDone] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadTab, setUploadTab] = useState<UploadTab>('file');
   const [qrSession, setQrSession] = useState<UploadSessionState | null>(null);
   const [qrStatus, setQrStatus] = useState('');
   const [qrLoading, setQrLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [simulatingAnalyze, setSimulatingAnalyze] = useState(false);
-  const [analyzeGateStarted, setAnalyzeGateStarted] = useState(false);
-  const [analyzeGateDelayDone, setAnalyzeGateDelayDone] = useState(false);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraFallbackInputRef = useRef<HTMLInputElement>(null);
@@ -133,6 +132,8 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
   const analyzeInFlightRef = useRef(false);
   const analyzeRequestIdRef = useRef(0);
   const analyzedImageUrlRef = useRef('');
+  const analysisPromiseRef = useRef<Promise<void> | null>(null);
+  const step2DelayTimerRef = useRef<number | null>(null);
 
   const [formData, setFormData] = useState(initialFormState);
   const qrImageSrc = useMemo(() => {
@@ -157,6 +158,13 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
     }
   };
 
+  const clearStep2DelayTimer = () => {
+    if (step2DelayTimerRef.current) {
+      window.clearTimeout(step2DelayTimerRef.current);
+      step2DelayTimerRef.current = null;
+    }
+  };
+
   const processSelectedFile = async (file: File) => {
     if (!file) return;
     if (!isSupportedImage(file)) {
@@ -174,6 +182,11 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
 
     setSelectedFile(file);
     setAnalysisDone(false);
+    setStep2AnalyzeStarted(false);
+    setStep2DelayDone(false);
+    analyzedImageUrlRef.current = '';
+    analysisPromiseRef.current = null;
+    clearStep2DelayTimer();
     const previewBase64 = await toBase64(file);
     setFormData((p) => ({ ...p, imagePreview: `data:${file.type};base64,${previewBase64}` }));
 
@@ -182,7 +195,9 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
       const previousImageUrl = formData.imageUrl;
       const url = await uploadImage(file);
       setFormData((p) => ({ ...p, imageUrl: url }));
-      void handleAnalyzeImage({ imageUrl: url, file });
+      const analysisPromise = handleAnalyzeImage({ imageUrl: url, file });
+      analysisPromiseRef.current = analysisPromise;
+      void analysisPromise;
       if (previousImageUrl && previousImageUrl !== url) {
         void cleanupUploadedImage(previousImageUrl);
       }
@@ -239,9 +254,16 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
     const previousImageUrl = formData.imageUrl;
     setSelectedFile(null);
     setAnalysisDone(false);
+    setStep2AnalyzeStarted(false);
+    setStep2DelayDone(false);
+    analyzedImageUrlRef.current = '';
+    analysisPromiseRef.current = null;
+    clearStep2DelayTimer();
     setFormData((p) => ({ ...p, imageUrl, imagePreview: imageUrl }));
     setQrStatus('Image received from phone.');
-    void handleAnalyzeImage({ imageUrl });
+    const analysisPromise = handleAnalyzeImage({ imageUrl });
+    analysisPromiseRef.current = analysisPromise;
+    void analysisPromise;
     if (previousImageUrl && previousImageUrl !== imageUrl) {
       void cleanupUploadedImage(previousImageUrl);
     }
@@ -307,7 +329,6 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
           }
           if (!prev.color?.trim() && data.color) next.color = normalizeColorList(data.color);
           if (!prev.brand?.trim() && data.brand) next.brand = data.brand;
-          if (!prev.foundLocation?.trim() && data.foundLocation) next.foundLocation = data.foundLocation;
           if (!prev.foundDate?.trim() && data.foundDate && /^\d{4}-\d{2}-\d{2}$/.test(data.foundDate)) next.foundDate = data.foundDate;
           if (data.highValue === true) next.highValue = true;
           next.showInPublicCatalog = !shouldDefaultHidden(
@@ -351,38 +372,8 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
       analyzeInFlightRef.current = false;
       setAnalyzing(false);
       setAnalysisDone(true);
+      analysisPromiseRef.current = null;
       console.log('[AddItemModal] analyze finish', { requestId });
-    }
-  };
-
-  const handleSimulatedAnalyze = async () => {
-    if (!formData.foundLocation.trim()) {
-      toast({
-        title: 'Missing information',
-        description: 'Found location is required before analysis.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    if (!formData.imageUrl) {
-      toast({
-        title: 'Missing image',
-        description: 'Please upload an image first.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    if (simulatingAnalyze) return;
-
-    setAnalyzeGateStarted(true);
-    setAnalyzeGateDelayDone(false);
-    setSimulatingAnalyze(true);
-    await new Promise((resolve) => window.setTimeout(resolve, 2000));
-    setSimulatingAnalyze(false);
-    setAnalyzeGateDelayDone(true);
-
-    if (analysisDone) {
-      setStep(3);
     }
   };
 
@@ -391,10 +382,12 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
     setFormData((p) => ({ ...p, imageUrl: '', imagePreview: null }));
     setSelectedFile(null);
     setAnalysisDone(false);
+    setStep2AnalyzeStarted(false);
+    setStep2DelayDone(false);
     setAnalyzing(false);
-    setAnalyzeGateStarted(false);
-    setAnalyzeGateDelayDone(false);
     analyzedImageUrlRef.current = '';
+    analysisPromiseRef.current = null;
+    clearStep2DelayTimer();
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (cameraFallbackInputRef.current) cameraFallbackInputRef.current.value = '';
     if (imageUrlToDelete) void cleanupUploadedImage(imageUrlToDelete);
@@ -402,6 +395,16 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
 
   const handleNext = () => {
     if (step === 1 && uploading) return;
+    if (step === 2) {
+      if (formData.latitude == null || formData.longitude == null || !formData.foundLocation.trim()) {
+        toast({
+          title: 'Missing location pin',
+          description: 'Pin the found location on the map before continuing.',
+          variant: 'destructive'
+        });
+        return;
+      }
+    }
     if (step === 3) {
       if (!formData.name.trim() || !formData.description.trim() || !formData.foundLocation.trim() || !formData.foundDate.trim()) {
         toast({
@@ -456,11 +459,12 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
     setFormData(initialFormState());
     setSelectedFile(null);
     setAnalysisDone(false);
+    setStep2AnalyzeStarted(false);
+    setStep2DelayDone(false);
     setAnalyzing(false);
-    setSimulatingAnalyze(false);
-    setAnalyzeGateStarted(false);
-    setAnalyzeGateDelayDone(false);
     analyzedImageUrlRef.current = '';
+    analysisPromiseRef.current = null;
+    clearStep2DelayTimer();
     setUploadTab('file');
     clearQrPolling();
     setQrSession(null);
@@ -537,6 +541,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
   useEffect(() => {
     return () => {
       clearQrPolling();
+      clearStep2DelayTimer();
       if (formData.imageUrl && !cleanupRanRef.current) {
         void cleanupUploadedImage(formData.imageUrl);
       }
@@ -572,12 +577,33 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
     }));
   }, [open, initialData]);
 
+  const handleAnalyzeStep = async () => {
+    if (step2AnalyzeStarted) return;
+    if (formData.latitude == null || formData.longitude == null || !formData.foundLocation.trim()) {
+      toast({
+        title: 'Missing location pin',
+        description: 'Pin the found location on the map before analyzing.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setStep2AnalyzeStarted(true);
+    setStep2DelayDone(false);
+    clearStep2DelayTimer();
+    step2DelayTimerRef.current = window.setTimeout(() => {
+      setStep2DelayDone(true);
+      step2DelayTimerRef.current = null;
+    }, 2000);
+  };
+
   useEffect(() => {
     if (step !== 2) return;
-    if (!analyzeGateStarted || !analyzeGateDelayDone) return;
-    if (!analysisDone) return;
+    if (!step2AnalyzeStarted || !step2DelayDone) return;
+    const analysisReady = formData.imageUrl ? analysisDone : true;
+    if (!analysisReady) return;
     setStep(3);
-  }, [step, analyzeGateStarted, analyzeGateDelayDone, analysisDone]);
+  }, [step, step2AnalyzeStarted, step2DelayDone, formData.imageUrl, analysisDone]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -585,7 +611,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
         <DialogHeader>
           <DialogTitle className="font-display text-xl">Add Found Item</DialogTitle>
           <DialogDescription>
-            Step {step} of 4 - {step === 1 ? 'Upload Photo' : step === 2 ? 'Found Location' : step === 3 ? 'Item Details' : 'Review'}
+            Step {step} of 4 - {step === 1 ? 'Upload Photo' : step === 2 ? 'Pin Location' : step === 3 ? 'Item Details' : 'Review'}
           </DialogDescription>
         </DialogHeader>
 
@@ -758,6 +784,9 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
 
             <div className="flex gap-3 justify-end pt-4">
               <Button variant="outline" onClick={() => handleOpenChange(false)}>Cancel</Button>
+              <Button type="button" variant="ghost" onClick={() => setStep(2)} disabled={uploading}>
+                Skip
+              </Button>
               <Button onClick={handleNext} disabled={!formData.imagePreview || uploading}>
                 Continue <ChevronRight className="w-4 h-4 ml-2" />
               </Button>
@@ -767,37 +796,52 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
 
         {step === 2 && (
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="foundLocationStep2" className="text-sm font-medium">Found Location *</Label>
-              <Input
-                id="foundLocationStep2"
-                required
-                placeholder="e.g., Main entrance"
-                value={formData.foundLocation}
-                onChange={(e) => setFormData((p) => ({ ...p, foundLocation: e.target.value }))}
-                className="bg-background border-border/50"
-              />
-            </div>
-
-            <div className="rounded-lg border border-border/50 bg-muted/20 p-4">
+            <MapPinPicker
+              latitude={formData.latitude}
+              longitude={formData.longitude}
+              onSelect={(lat, lng, address) => {
+                setFormData((p) => ({
+                  ...p,
+                  latitude: lat,
+                  longitude: lng,
+                  foundLocation: address || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+                }));
+              }}
+              onClear={() =>
+                setFormData((p) => ({
+                  ...p,
+                  latitude: null,
+                  longitude: null,
+                  foundLocation: '',
+                }))
+              }
+            />
+            <div className="rounded-lg border border-border/50 bg-muted/20 p-3">
               <p className="text-xs text-muted-foreground">
-                Status: {analyzing ? 'Analyzing image...' : analysisDone ? 'Analysis ready' : 'Waiting for analysis...'}
+                Found location: {formData.foundLocation?.trim() ? formData.foundLocation : 'No pin selected'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {step2AnalyzeStarted
+                  ? ((step2DelayDone && (formData.imageUrl ? analysisDone : true))
+                    ? 'Continuing...'
+                    : 'Analyzing...')
+                  : 'Analysis runs automatically after image upload. Click Analyze to continue.'}
               </p>
             </div>
 
             <div className="flex gap-3 justify-end pt-4">
               <Button variant="outline" onClick={handleBack}><ChevronLeft className="w-4 h-4 mr-2" />Back</Button>
-              <Button type="button" variant="ghost" onClick={() => setStep(3)}>
-                Skip
-              </Button>
+              {step2AnalyzeStarted && (
+                <Button type="button" variant="ghost" onClick={() => setStep(3)}>
+                  Skip
+                </Button>
+              )}
               <Button
                 type="button"
-                onClick={handleSimulatedAnalyze}
-                disabled={!formData.foundLocation.trim() || simulatingAnalyze || analyzeGateStarted}
+                onClick={handleAnalyzeStep}
+                disabled={uploading || step2AnalyzeStarted || formData.latitude == null || formData.longitude == null}
               >
-                {simulatingAnalyze || analyzeGateStarted
-                  ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analyzing...</>)
-                  : 'Analyze'}
+                Analyze
               </Button>
             </div>
           </div>
@@ -853,18 +897,6 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="foundLocation" className="text-sm font-medium">Found Location *</Label>
-                <Input
-                  id="foundLocation"
-                  required
-                  placeholder="e.g., Main entrance"
-                  value={formData.foundLocation}
-                  onChange={(e) => setFormData((p) => ({ ...p, foundLocation: e.target.value }))}
-                  className="bg-background border-border/50"
-                />
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="foundDate" className="text-sm font-medium">Found Date *</Label>
                 <Input
                   id="foundDate"
@@ -873,22 +905,6 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
                   value={formData.foundDate}
                   onChange={(e) => setFormData((p) => ({ ...p, foundDate: e.target.value }))}
                   className="bg-background border-border/50"
-                />
-              </div>
-
-              <div className="col-span-2">
-                <MapPinPicker
-                  latitude={formData.latitude}
-                  longitude={formData.longitude}
-                  onSelect={(lat, lng, address) => {
-                    setFormData((p) => ({
-                      ...p,
-                      latitude: lat,
-                      longitude: lng,
-                      foundLocation: address || p.foundLocation || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-                    }));
-                  }}
-                  onClear={() => setFormData((p) => ({ ...p, latitude: null, longitude: null }))}
                 />
               </div>
 
@@ -919,6 +935,7 @@ export function AddItemModal({ open, onOpenChange, onSubmit, initialData, staffI
               <div className="space-y-2 text-sm">
                 <div><span className="text-muted-foreground">Name:</span> <span className="font-medium">{formData.name}</span></div>
                 <div><span className="text-muted-foreground">Category:</span> <span className="font-medium">{categoryLabels[formData.category]}</span></div>
+                <div><span className="text-muted-foreground">Found location:</span> <span className="font-medium">{formData.foundLocation || 'Not set'}</span></div>
                 {formData.imagePreview && <div><span className="text-muted-foreground">Photo:</span> <span className="font-medium">Yes</span></div>}
                 <div><span className="text-muted-foreground">Show in catalog:</span> <span className="font-medium">{formData.showInPublicCatalog ? 'Yes' : 'No (hidden)'}</span></div>
               </div>

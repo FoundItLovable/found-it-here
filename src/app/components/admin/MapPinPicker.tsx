@@ -77,7 +77,7 @@ export function MapPinPicker({ latitude, longitude, onSelect, onClear }: MapPinP
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Pin location on map (optional)</span>
+        <span className="text-sm font-medium">Pin found location on map *</span>
         {hasPin && onClear && (
           <button
             type="button"

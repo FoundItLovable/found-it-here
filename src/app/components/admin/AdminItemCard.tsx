@@ -18,9 +18,10 @@ interface AdminItemCardProps {
   onCancel: (item: FoundItem) => void; // we’ll use this as “Delete”
   onView: (item: FoundItem) => void; // kept for compatibility (you can no-op it)
   onToggleCatalogVisibility?: (item: FoundItem) => void;
+  compact?: boolean;
 }
 
-export function AdminItemCard({ item, onEdit, onClose, onCancel, onView, onToggleCatalogVisibility }: AdminItemCardProps) {
+export function AdminItemCard({ item, onEdit, onClose, onCancel, onView, onToggleCatalogVisibility, compact = false }: AdminItemCardProps) {
   const statusStyles: Record<string, string> = {
     available: "bg-primary/15 text-primary border-primary/30",
     returned: "bg-muted text-muted-foreground border-border",
@@ -29,12 +30,12 @@ export function AdminItemCard({ item, onEdit, onClose, onCancel, onView, onToggl
   const badgeClass = statusStyles[item.status] ?? statusStyles.available;
 
   return (
-    <Card className="overflow-hidden rounded-xl border-0 bg-card shadow-[0_2px_12px_rgba(0,0,0,0.06)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-200 ease-out group">
+    <Card className="w-full max-w-full overflow-hidden rounded-xl border-0 bg-card shadow-[0_2px_12px_rgba(0,0,0,0.06)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-200 ease-out group">
       <CardContent className="p-0">
         {/* Hero image - stretches across top half, edge-to-edge */}
-        <div className="relative w-full aspect-[4/3] bg-muted/50 overflow-hidden">
+        <div className={`relative w-full ${compact ? 'aspect-[16/9]' : 'aspect-[4/3]'} bg-muted/50 overflow-hidden`}>
           {item.imageUrl ? (
-            <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+            <img src={item.imageUrl} alt={item.name} className="block w-full max-w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted/80 to-muted/40">
               <span className="text-4xl text-muted-foreground/70">{categoryIcons[item.category]}</span>
