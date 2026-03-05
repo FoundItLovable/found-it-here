@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getCurrentUserWithProfile } from '../../lib/auth';
 import { Logo } from '@/components/Logo';
+import { useLogoDestination } from '@/hooks/useLogoDestination';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -24,15 +24,7 @@ import {
 
 export default function LandingPage() {
   const [reviewIndex, setReviewIndex] = useState(0);
-  const [logoTo, setLogoTo] = useState<string>('/');
-
-  useEffect(() => {
-    getCurrentUserWithProfile().then((u) => {
-      if (!u) setLogoTo('/');
-      else if (['staff', 'admin', 'owner'].includes(u.profile?.role ?? '')) setLogoTo('/admin');
-      else setLogoTo('/dashboard');
-    });
-  }, []);
+  const logoTo = useLogoDestination();
 
   const reviews = [
     {

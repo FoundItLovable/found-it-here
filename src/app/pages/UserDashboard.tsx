@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { useTypewriterPlaceholder } from '@/hooks/useTypewriterPlaceholder';
 import { useWatchedMatches } from '@/hooks/useWatchedMatches';
+import { useLogoDestination } from '@/hooks/useLogoDestination';
 import { categoryIcons } from '@/types';
 
 import { getCurrentUser, signOut } from '../../lib/auth';
@@ -94,6 +95,7 @@ import { MatchCardSkeleton } from '@/components/skeletons/MatchCardSkeleton';
 
 export default function UserDashboard() {
   const navigate = useNavigate();
+  const logoTo = useLogoDestination();
   const [activeTab, setActiveTab] = useState<'report' | 'reports'>('report');
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -403,7 +405,7 @@ export default function UserDashboard() {
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-white/20 bg-background/40 backdrop-blur-2xl shadow-lg shadow-black/5">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
-          <Logo to="/dashboard" />
+          <Logo to={logoTo} />
           <nav className="flex items-center gap-4 md:gap-6">
             <Link
               to="/dashboard"

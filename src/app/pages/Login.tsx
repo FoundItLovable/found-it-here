@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "@/hooks/use-toast";
 import { Logo } from "@/components/Logo";
+import { useLogoDestination } from "@/hooks/useLogoDestination";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Mail, Lock } from "lucide-react";
 
@@ -29,6 +30,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
+  const logoTo = useLogoDestination();
   const from = (location.state as { from?: string })?.from ?? "/dashboard";
   const [isLoading, setIsLoading] = useState(false);
 
@@ -96,7 +98,7 @@ export default function Login() {
         <Card className="w-full max-w-md glass-card shadow-2xl animate-fade-in bg-card/95 backdrop-blur-xl">
           <CardHeader className="text-center space-y-4 pb-2">
             <div className="flex justify-center">
-              <Logo to="/" />
+              <Logo to={logoTo} />
             </div>
             <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
             <CardDescription>Sign in to your FoundIt account</CardDescription>
