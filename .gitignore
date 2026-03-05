@@ -28,4 +28,3 @@ dist-ssr
 # Local dev / AI tooling
 CLAUDE.md
 SCHEMA_CHANGES.txt
-supabase/
