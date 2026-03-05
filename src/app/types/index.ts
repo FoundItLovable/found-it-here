@@ -18,6 +18,7 @@ export interface FoundItem {
   description: string;
   category: ItemCategory;
   dateFound: string;
+  foundLocation?: string;
   imageUrl?: string;
   status: 'available' | 'claimed' | 'returned';
   officeId: string;

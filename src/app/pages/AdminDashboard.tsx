@@ -19,6 +19,7 @@ import { AdminDashboardSkeleton } from "@/components/skeletons/AdminDashboardSke
 import { AdminItemCard } from "@/components/admin/AdminItemCard";
 import { InventoryMapView } from "@/components/admin/InventoryMapView";
 import { AddItemModal } from "@/components/admin/AddItemModal";
+import { EditItemModal } from "@/components/admin/EditItemModal";
 import { MetricsPanel } from "@/components/admin/MetricsPanel";
 import { toast } from "@/hooks/use-toast";
 
@@ -67,10 +68,10 @@ function rowToFoundItem(row: any, profile: any): FoundItem {
     status,
     imageUrl: row?.image_urls?.[0] ?? row?.image_url ?? undefined,
     dateFound: safeDateOnly(row?.found_date ?? row?.created_at),
+    foundLocation: String(row?.found_location ?? row?.current_location ?? ""),
     officeId: String(profile?.office_id ?? ""),
     officeName: String(profile?.office?.office_name ?? "Office"),
     officeLocation: officeLocation(profile),
-    foundLocation: row?.found_location ?? undefined,
     checkedInBy: String(profile?.full_name ?? ""),
     createdAt: String(row?.created_at ?? new Date().toISOString()),
     updatedAt: String(row?.updated_at ?? row?.created_at ?? new Date().toISOString()),
@@ -106,6 +107,9 @@ export default function AdminDashboard() {
   const [selectedItem, setSelectedItem] = useState<FoundItem | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<FoundItem | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [inventoryView, setInventoryView] = useState<'grid' | 'map'>('grid');
   const [staffContext, setStaffContext] = useState<{ staffId: string; officeId: string }>({
     staffId: "",
@@ -323,9 +327,86 @@ export default function AdminDashboard() {
     setSelectedItem(item);
     setShowDetails(true);
   };
-  const handleEdit = () => {}; // Edit disabled for now
+  const handleEdit = (item: FoundItem) => {
+    setEditingItem(item);
+    setShowEditModal(true);
+  };
   const handleClose = handleReturn;
   const handleCancel = handleDelete;
+
+  async function handleSaveEdit(data: {
+    name: string;
+    description: string;
+    category: string;
+    color: string;
+    brand: string;
+    foundLocation: string;
+    foundDate: string;
+    showInPublicCatalog: boolean;
+  }) {
+    if (!editingItem) return;
+    try {
+      setSavingEdit(true);
+      await updateFoundItem(editingItem.id, {
+        item_name: data.name,
+        description: data.description,
+        category: data.category,
+        color: data.color || null,
+        brand: data.brand || null,
+        found_location: data.foundLocation || null,
+        current_location: data.foundLocation || null,
+        found_date: data.foundDate,
+        show_in_public_catalog: data.showInPublicCatalog,
+      });
+
+      setItems((prev) =>
+        prev.map((item) =>
+          item.id === editingItem.id
+            ? {
+                ...item,
+                name: data.name,
+                description: data.description,
+                category: data.category as FoundItem["category"],
+                color: data.color || undefined,
+                brand: data.brand || undefined,
+                foundLocation: data.foundLocation || "",
+                dateFound: data.foundDate,
+                showInPublicCatalog: data.showInPublicCatalog,
+              }
+            : item
+        )
+      );
+
+      setSelectedItem((prev) =>
+        prev && prev.id === editingItem.id
+          ? {
+              ...prev,
+              name: data.name,
+              description: data.description,
+              category: data.category as FoundItem["category"],
+              color: data.color || undefined,
+              brand: data.brand || undefined,
+              foundLocation: data.foundLocation || "",
+              dateFound: data.foundDate,
+              showInPublicCatalog: data.showInPublicCatalog,
+            }
+          : prev
+      );
+
+      toast({ title: "Item updated", description: "Changes saved successfully." });
+      setShowEditModal(false);
+      setEditingItem(null);
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        title: "Update failed",
+        description: err?.message ?? "Could not save item changes",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   if (loading) {
     return <AdminDashboardSkeleton />;
@@ -556,6 +637,17 @@ export default function AdminDashboard() {
             onSubmit={handleAddItem}
             staffId={staffContext.staffId}
             officeId={staffContext.officeId}
+          />
+
+          <EditItemModal
+            open={showEditModal}
+            onOpenChange={(open) => {
+              setShowEditModal(open);
+              if (!open) setEditingItem(null);
+            }}
+            item={editingItem}
+            onSubmit={handleSaveEdit}
+            submitting={savingEdit}
           />
         </Tabs>
       </main>
