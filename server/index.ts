@@ -1296,14 +1296,20 @@ app.use((req, res) => {
   res.status(404).send(`No route for ${req.method} ${req.url}`);
 });
 
-server = app.listen(5050, () => {
-  console.log("Server running on http://localhost:5050");
-  try {
-    console.log("server.address():", server.address());
-    console.log("server.listening:", server.listening);
-  } catch (e) {
-    console.error("Error accessing server properties:", e);
-  }
+// server = app.listen(5050, () => {
+//   console.log("Server running on http://localhost:5050");
+//   try {
+//     console.log("server.address():", server.address());
+//     console.log("server.listening:", server.listening);
+//   } catch (e) {
+//     console.error("Error accessing server properties:", e);
+//   }
+// });
+
+const PORT = process.env.PORT || 5050;
+
+server = app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
 
 server.on("close", () => {
