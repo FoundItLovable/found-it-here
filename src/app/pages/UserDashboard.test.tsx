@@ -10,8 +10,8 @@ vi.mock('../../lib/auth', () => ({
 vi.mock('../../lib/database', () => ({
   getUserLostReports: vi.fn(),
   createLostItemReport: vi.fn(),
-  deleteLostItemReport: vi.fn(),
-  findPotentialMatches: vi.fn(),
+  updateLostItemReport: vi.fn(),
+  getUserReportPotentialMatches: vi.fn().mockResolvedValue([]),
 }));
 
 import UserDashboard from './UserDashboard';

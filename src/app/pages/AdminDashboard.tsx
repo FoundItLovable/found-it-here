@@ -8,9 +8,9 @@ import {
   getOfficeClaims,
   getAllLostReports,
   updateFoundItem,
-  deleteFoundItem,
   createFoundItem,
 } from "../../lib/database";
+import { supabase } from "../../lib/supabase";
 import type { ClaimRow, LostItemReportRow } from "../../lib/database";
 
 import { Logo } from "@/components/Logo";
@@ -255,6 +255,10 @@ export default function AdminDashboard() {
       setItems((prev) => [created, ...prev]);
       toast({ title: "Item added", description: "New found item created." });
 
+      // Trigger match recalculation server-side (fire and forget)
+      void supabase.functions.invoke("update-admin-matches", {
+        body: { foundItemId: createdRow.id, actor: "admin" },
+      });
     } catch (err: any) {
       console.error(err);
       toast({
@@ -288,6 +292,10 @@ export default function AdminDashboard() {
       await updateFoundItem(item.id, { status: "returned" });
       setItems((prev) => prev.map((x) => (x.id === item.id ? { ...x, status: "returned" } : x)));
       toast({ title: "Marked returned", description: `${item.name} is now returned.` });
+
+      // Clear potential matches — item is no longer available
+      void supabase.from("potential_matches").delete().eq("lost_item_id", item.id);
+
       confetti({
         particleCount: 80,
         spread: 60,
@@ -306,7 +314,10 @@ export default function AdminDashboard() {
 
   async function handleDelete(item: FoundItem) {
     try {
-      await deleteFoundItem(item.id);
+      const { error } = await supabase.functions.invoke("delete-found-item", {
+        body: { foundItemId: item.id, actor: "admin" },
+      });
+      if (error) throw error;
       setItems((prev) => prev.filter((x) => x.id !== item.id));
       toast({ title: "Deleted", description: `${item.name} removed.` });
     } catch (err: any) {
@@ -394,6 +405,12 @@ export default function AdminDashboard() {
 
       toast({ title: "Item updated", description: "Changes saved successfully." });
       setShowEditModal(false);
+
+      // Trigger match recalculation server-side (fire and forget)
+      void supabase.functions.invoke("update-admin-matches", {
+        body: { foundItemId: editingItem.id, actor: "admin" },
+      });
+
       setEditingItem(null);
     } catch (err: any) {
       console.error(err);

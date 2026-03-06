@@ -28,11 +28,11 @@ import { getCurrentUser, signOut } from '../../lib/auth';
 import {
   getUserLostReports,
   createLostItemReport,
-  deleteLostItemReport,
   updateLostItemReport,
-  findPotentialMatches,
+  getUserReportPotentialMatches,
   LostItemReportRow,
 } from '../../lib/database';
+import { supabase } from '../../lib/supabase';
 
 // Convert database row to frontend LostItem type
 function rowToLostItem(row: LostItemReportRow): LostItem {
@@ -135,58 +135,95 @@ export default function UserDashboard() {
     load();
   }, []);
 
-  // Load matches when a report is selected
+  // Refresh and preload matches for all active reports on dashboard load
   useEffect(() => {
-    if (!selectedReport) return;
+    if (!user || lostItems.length === 0) return;
 
-    // Check if we already have matches for this report
-    if (matches.has(selectedReport.id)) return;
+    const reportIdsToLoad = lostItems.map((item) => item.id).filter((id) => !matches.has(id));
+    if (reportIdsToLoad.length === 0) return;
 
-    async function loadMatches() {
-      if (!selectedReport) return;
+    const activeReportIds = lostItems
+      .filter((item) => item.status === 'searching')
+      .map((item) => item.id)
+      .filter((id) => reportIdsToLoad.includes(id));
 
+    let cancelled = false;
+
+    function formatMatches(reportId: string, potentialMatches: any[]): Match[] {
+      return potentialMatches
+        .map((row: any) => ({
+          id: String(row.matchId ?? `match-${reportId}-${row.foundItemId}`),
+          lostItemId: String(row.reportId ?? reportId),
+          foundItemId: String(row.foundItemId),
+          confidence: Number.isFinite(Number(row.score))
+            ? Math.round(Number(row.score) * 100)
+            : 50,
+          foundItem: dbFoundItemToFoundItem(row.foundItem),
+        }))
+        .filter((m: Match) => m.confidence >= 45);
+    }
+
+    async function preloadMatches() {
       setLoadingMatches(true);
       try {
-        const lostItemData = {
-          item_name: selectedReport.name,
-          description: selectedReport.description,
-          category: selectedReport.category,
-          color: selectedReport.color,
-          lost_location: selectedReport.locationLost,
-        };
-
-        const potentialMatches = await findPotentialMatches(lostItemData);
-
-        const availableMatches = potentialMatches.filter(
-          (item: any) => String(item?.status ?? '').toLowerCase() === 'available'
+        // Step 1: Load existing matches immediately so the user sees something
+        const initial = await Promise.all(
+          reportIdsToLoad.map(async (reportId) => {
+            const potentialMatches = await getUserReportPotentialMatches(reportId);
+            return [reportId, formatMatches(reportId, potentialMatches)] as const;
+          })
         );
 
-        const formattedMatches: Match[] = availableMatches
-          .map((item: any, index: number) => ({
-          id: `match-${selectedReport.id}-${index}`,
-          lostItemId: selectedReport.id,
-          foundItemId: item.id,
-          confidence: Math.round(item.matchScore * 100),
-          foundItem: dbFoundItemToFoundItem(item),
-          }))
-          .filter((match) => match.confidence >= 45);
+        if (cancelled) return;
 
-        setMatches(prev => new Map(prev).set(selectedReport.id, formattedMatches));
-      } catch (err: unknown) {
-        console.error('Failed to load matches:', err);
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        toast({
-          title: 'Error',
-          description: `Failed to load potential matches: ${message}`,
-          variant: 'destructive',
+        setMatches((prev) => {
+          const next = new Map(prev);
+          for (const [reportId, reportMatches] of initial) next.set(reportId, reportMatches);
+          return next;
         });
-      } finally {
         setLoadingMatches(false);
+
+        // Step 2: Refresh matches server-side for active reports, then reload
+        const results = await Promise.all(
+          activeReportIds.map((reportId) =>
+            supabase.functions.invoke("update-user-matches", { body: { reportId } })
+              .then((res) => ({ reportId, error: res.error }))
+          )
+        );
+
+        if (cancelled) return;
+
+        const refreshedIds = results
+          .filter((r) => !r.error)
+          .map((r) => r.reportId);
+
+        if (refreshedIds.length === 0) return;
+
+        const refreshed = await Promise.all(
+          refreshedIds.map(async (reportId) => {
+            const potentialMatches = await getUserReportPotentialMatches(reportId);
+            return [reportId, formatMatches(reportId, potentialMatches)] as const;
+          })
+        );
+
+        if (cancelled) return;
+
+        setMatches((prev) => {
+          const next = new Map(prev);
+          for (const [reportId, reportMatches] of refreshed) next.set(reportId, reportMatches);
+          return next;
+        });
+      } catch (err: unknown) {
+        if (cancelled) return;
+        console.error('Failed to load matches:', err);
+      } finally {
+        if (!cancelled) setLoadingMatches(false);
       }
     }
 
-    loadMatches();
-  }, [selectedReport, matches]);
+    void preloadMatches();
+    return () => { cancelled = true; };
+  }, [user, lostItems, matches]);
 
   const handleReportItem = async (data: {
     name: string;
@@ -220,6 +257,11 @@ export default function UserDashboard() {
 
       const newItem = rowToLostItem(created);
       setLostItems(prev => [newItem, ...prev]);
+
+      // Trigger server-side match computation (fire and forget)
+      void supabase.functions.invoke("update-user-matches", {
+        body: { reportId: created.id },
+      });
     } catch (err: any) {
       console.error('Failed to create report:', err);
       toast({
@@ -255,6 +297,10 @@ export default function UserDashboard() {
         prev.map((r) => (r.id === reportId ? { ...r, status: 'recovered' as const } : r))
       );
       setSelectedReport((prev) => (prev?.id === reportId ? null : prev));
+
+      // Clear potential matches — report is no longer active
+      void supabase.from("potential_matches").delete().eq("report_id", reportId);
+
       toast({
         title: 'Item recovered!',
         description: "We're glad you got your item back.",
@@ -282,7 +328,10 @@ export default function UserDashboard() {
 
     try {
       setDeletingReportId(reportId);
-      await deleteLostItemReport(reportId);
+      const { error: deleteError } = await supabase.functions.invoke("delete-lost-report", {
+        body: { reportId },
+      });
+      if (deleteError) throw deleteError;
 
       setLostItems(prev => prev.filter(item => item.id !== reportId));
       setSelectedReport(prev => (prev?.id === reportId ? null : prev));

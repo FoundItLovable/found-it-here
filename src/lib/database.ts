@@ -660,6 +660,67 @@ export const getUnreadNotificationCount = async (): Promise<number | null> => {
 };
 
 // --------------------------------------------
+// POTENTIAL MATCHES (edge function results)
+// --------------------------------------------
+
+export const getUserReportPotentialMatches = async (reportId: string): Promise<any[]> => {
+  const trimmedReportId = String(reportId ?? "").trim();
+  if (!trimmedReportId) throw new Error("reportId is required");
+
+  const { data: reportData, error: reportError } = await supabase
+    .from("lost_item_reports")
+    .select("id")
+    .eq("id", trimmedReportId)
+    .single();
+  if (reportError) throw reportError;
+  if (!reportData) return [];
+
+  const { data: matchRows, error: matchError } = await supabase
+    .from("potential_matches")
+    .select("match_id, report_id, lost_item_id, score")
+    .eq("report_id", trimmedReportId);
+  if (matchError) throw matchError;
+
+  const foundItemIds = Array.from(
+    new Set((matchRows ?? []).map((row: any) => String(row?.lost_item_id ?? "").trim()).filter(Boolean))
+  );
+  if (foundItemIds.length === 0) return [];
+
+  const { data: foundItems, error: foundItemsError } = await supabase
+    .from("found_items")
+    .select(`
+      *,
+      office:offices!office_id(
+        office_id,
+        office_name,
+        building_name,
+        office_address
+      )
+    `)
+    .in("id", foundItemIds);
+  if (foundItemsError) throw foundItemsError;
+
+  const foundById = new Map(
+    (foundItems ?? []).map((row: any) => [String(row.id), row] as const)
+  );
+
+  return (matchRows ?? [])
+    .map((row: any) => {
+      const foundItemId = String(row?.lost_item_id ?? "");
+      const foundItem = foundById.get(foundItemId);
+      if (!foundItem) return null;
+      return {
+        matchId: String(row?.match_id ?? `${trimmedReportId}:${foundItemId}`),
+        reportId: String(row?.report_id ?? trimmedReportId),
+        foundItemId,
+        score: Number.isFinite(Number(row?.score)) ? Number(row.score) : null,
+        foundItem,
+      };
+    })
+    .filter(Boolean);
+};
+
+// --------------------------------------------
 // MATCHING ALGORITHM
 // --------------------------------------------
 
