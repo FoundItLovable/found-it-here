@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 vi.mock('../../lib/auth', () => ({
   getCurrentUser: vi.fn(),
   getCurrentUserWithProfile: vi.fn(),
+  subscribeToAuthChanges: vi.fn().mockReturnValue({ unsubscribe: vi.fn() }),
   signOut: vi.fn(),
 }));
 

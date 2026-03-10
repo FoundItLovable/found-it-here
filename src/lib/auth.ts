@@ -81,6 +81,15 @@ export const isStaff = async (): Promise<boolean> => {
   return role === "staff";
 };
 
+export const subscribeToAuthChanges = (
+  callback: (event: string, session: import("@supabase/supabase-js").Session | null) => void
+): { unsubscribe: () => void } => {
+  const { data } = supabase.auth.onAuthStateChange((event, session) => {
+    callback(event, session);
+  });
+  return { unsubscribe: () => data.subscription.unsubscribe() };
+};
+
 export const signIn = async (email: string, password: string) => {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;

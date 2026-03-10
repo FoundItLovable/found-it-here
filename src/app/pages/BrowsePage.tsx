@@ -33,7 +33,8 @@ import {
   DrawerTrigger,
 } from '@/components/ui/drawer';
 import { Search, LogOut, MapPin, Calendar, User, Loader2, Menu, SlidersHorizontal } from 'lucide-react';
-import { getCurrentUser, signOut } from '../../lib/auth';
+import { signOut } from '../../lib/auth';
+import { useAuthState } from '@/hooks/useAuthState';
 import {
   getPublicCatalogItems,
   getAllOffices,
@@ -176,8 +177,7 @@ function dbRowToFoundItem(row: any): FoundItem {
 
 export default function BrowsePage() {
   const navigate = useNavigate();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loading } = useAuthState();
   const [items, setItems] = useState<FoundItem[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -197,11 +197,10 @@ export default function BrowsePage() {
   ]);
 
   useEffect(() => {
+    if (loading) return;
     async function load() {
       try {
-        const currentUser = await getCurrentUser();
-        setUser(currentUser);
-        if (!currentUser) {
+        if (!user) {
           navigate('/login', { replace: true, state: { from: '/browse' } });
           return;
         }
@@ -211,11 +210,11 @@ export default function BrowsePage() {
         console.error('Failed to load:', err);
         navigate('/login', { replace: true, state: { from: '/browse' } });
       } finally {
-        setLoading(false);
+        // loading is managed by useAuthState
       }
     }
     load();
-  }, [navigate]);
+  }, [user, loading, navigate]);
 
   const loadInitial = useCallback(async () => {
     setLoading(true);
@@ -275,7 +274,6 @@ export default function BrowsePage() {
   const handleSignOut = async () => {
     try {
       await signOut();
-      setUser(null);
       navigate('/');
     } catch (err) {
       console.error('Sign out failed:', err);

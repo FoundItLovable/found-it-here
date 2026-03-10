@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
 import { getCurrentUserWithProfile, isStaff, signOut } from "../../lib/auth";
+import { useAuthState } from "@/hooks/useAuthState";
 import {
   getOfficeFoundItems,
   getOfficeClaims,
@@ -87,6 +88,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const logoTo = useLogoDestination();
 
+  const { user: authUser, loading: authLoading } = useAuthState();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<FoundItem[]>([]);
   const [claims, setClaims] = useState<ClaimRow[]>([]);
@@ -117,11 +119,17 @@ export default function AdminDashboard() {
   });
 
   useEffect(() => {
+    if (authLoading) return;
     let mounted = true;
 
     async function load() {
       try {
         setLoading(true);
+
+        if (!authUser) {
+          navigate("/Login");
+          return;
+        }
 
         const userWithProfile: any = await getCurrentUserWithProfile();
         if (!userWithProfile) {
@@ -170,7 +178,7 @@ export default function AdminDashboard() {
     return () => {
       mounted = false;
     };
-  }, [navigate]);
+  }, [authUser, authLoading, navigate]);
 
   const stats = useMemo(() => {
     const total = items.length;

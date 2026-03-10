@@ -25,7 +25,8 @@ import { useWatchedMatches } from '@/hooks/useWatchedMatches';
 import { useLogoDestination } from '@/hooks/useLogoDestination';
 import { categoryIcons } from '@/types';
 
-import { getCurrentUser, signOut } from '../../lib/auth';
+import { signOut } from '../../lib/auth';
+import { useAuthState } from '@/hooks/useAuthState';
 import {
   getUserLostReports,
   createLostItemReport,
@@ -98,8 +99,7 @@ export default function UserDashboard() {
   const navigate = useNavigate();
   const logoTo = useLogoDestination();
   const [activeTab, setActiveTab] = useState<'report' | 'reports'>('report');
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loading } = useAuthState();
   const [lostItems, setLostItems] = useState<LostItem[]>([]);
   const [selectedReport, setSelectedReport] = useState<LostItem | null>(null);
   const [matches, setMatches] = useState<Map<string, Match[]>>(new Map());
@@ -137,25 +137,13 @@ export default function UserDashboard() {
   ]);
   const { isWatched, toggleWatch } = useWatchedMatches(user?.id ?? null);
 
-  // Load user and their reports on mount
+  // Load reports whenever auth state resolves
   useEffect(() => {
-    async function load() {
-      try {
-        const currentUser = await getCurrentUser();
-        setUser(currentUser);
-
-        if (currentUser) {
-          const reports = await getUserLostReports();
-          setLostItems(reports.map(rowToLostItem));
-        }
-      } catch (err) {
-        console.error('Failed to load data:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, []);
+    if (loading || !user) return;
+    getUserLostReports()
+      .then((reports) => setLostItems(reports.map(rowToLostItem)))
+      .catch((err) => console.error('Failed to load reports:', err));
+  }, [user, loading]);
 
   // Preload matches for all reports once reports are loaded (no click-triggered fetches).
   useEffect(() => {

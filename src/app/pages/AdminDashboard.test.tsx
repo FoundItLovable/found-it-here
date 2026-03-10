@@ -3,7 +3,9 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../lib/auth', () => ({
+  getCurrentUser: vi.fn(),
   getCurrentUserWithProfile: vi.fn(),
+  subscribeToAuthChanges: vi.fn().mockReturnValue({ unsubscribe: vi.fn() }),
   isStaff: vi.fn(),
   signOut: vi.fn(),
 }));
@@ -18,7 +20,7 @@ vi.mock('../../lib/database', () => ({
 }));
 
 import AdminDashboard from './AdminDashboard';
-import { getCurrentUserWithProfile, isStaff } from '../../lib/auth';
+import { getCurrentUser, getCurrentUserWithProfile, isStaff } from '../../lib/auth';
 import { getOfficeFoundItems, getOfficeClaims, getAllLostReports } from '../../lib/database';
 
 // ---------------------------------------------------------------------------
@@ -53,6 +55,7 @@ function renderDashboard() {
 
 describe('AdminDashboard', () => {
   beforeEach(() => {
+    vi.mocked(getCurrentUser).mockResolvedValue({ id: 'staff-1', email: 'staff@example.com' } as any);
     vi.mocked(getCurrentUserWithProfile).mockResolvedValue(mockUserWithProfile);
     vi.mocked(isStaff).mockResolvedValue(true);
     vi.mocked(getOfficeFoundItems).mockResolvedValue([]);
