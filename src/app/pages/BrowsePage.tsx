@@ -19,8 +19,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, LogOut, MapPin, Calendar, User, Loader2 } from 'lucide-react';
-import { getCurrentUser, getCurrentUserWithProfile, signOut } from '../../lib/auth';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from '@/components/ui/drawer';
+import { Search, LogOut, MapPin, Calendar, User, Loader2, Menu, SlidersHorizontal } from 'lucide-react';
+import { getCurrentUser, signOut } from '../../lib/auth';
 import {
   getPublicCatalogItems,
   getAllOffices,
@@ -28,6 +41,111 @@ import {
 } from '../../lib/database';
 import { FoundItem, ItemCategory, categoryLabels, categoryIcons } from '@/types';
 import { useTypewriterPlaceholder } from '@/hooks/useTypewriterPlaceholder';
+import { useLogoDestination } from '@/hooks/useLogoDestination';
+
+function FiltersForm({
+  filters,
+  setFilters,
+  setSearchInput,
+  offices,
+  onApply,
+}: {
+  filters: PublicCatalogFilters;
+  setFilters: React.Dispatch<React.SetStateAction<PublicCatalogFilters>>;
+  setSearchInput: (v: string) => void;
+  offices: { office_id: string; office_name?: string | null; building_name?: string | null }[];
+  onApply: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <Select
+        value={filters.category ?? 'all'}
+        onValueChange={(v) =>
+          setFilters((f) => ({ ...f, category: v === 'all' ? undefined : v }))
+        }
+      >
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Category" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All categories</SelectItem>
+          {Object.entries(categoryLabels).map(([key, label]) => (
+            <SelectItem key={key} value={key}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={filters.officeId ?? 'all'}
+        onValueChange={(v) =>
+          setFilters((f) => ({ ...f, officeId: v === 'all' ? undefined : v }))
+        }
+      >
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Office" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All offices</SelectItem>
+          {offices.map((o) => (
+            <SelectItem key={o.office_id} value={o.office_id}>
+              {o.office_name ?? o.building_name ?? o.office_id}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input
+        placeholder="Color"
+        value={filters.color ?? ''}
+        onChange={(e) =>
+          setFilters((f) => ({ ...f, color: e.target.value.trim() || undefined }))
+        }
+        className="w-full"
+      />
+      <Input
+        placeholder="Brand"
+        value={filters.brand ?? ''}
+        onChange={(e) =>
+          setFilters((f) => ({ ...f, brand: e.target.value.trim() || undefined }))
+        }
+        className="w-full"
+      />
+      <Input
+        type="date"
+        placeholder="From date"
+        value={filters.dateFrom ?? ''}
+        onChange={(e) =>
+          setFilters((f) => ({ ...f, dateFrom: e.target.value || undefined }))
+        }
+        className="w-full"
+      />
+      <Input
+        type="date"
+        placeholder="To date"
+        value={filters.dateTo ?? ''}
+        onChange={(e) =>
+          setFilters((f) => ({ ...f, dateTo: e.target.value || undefined }))
+        }
+        className="w-full"
+      />
+      <div className="flex gap-2 pt-2">
+        <Button
+          variant="outline"
+          className="flex-1"
+          onClick={() => {
+            setFilters({});
+            setSearchInput('');
+          }}
+        >
+          Clear filters
+        </Button>
+        <Button className="flex-1" onClick={onApply}>
+          Apply
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function dbRowToFoundItem(row: any): FoundItem {
   const office = row.office ?? row.staff?.office;
@@ -67,7 +185,8 @@ export default function BrowsePage() {
   const [selectedItem, setSelectedItem] = useState<FoundItem | null>(null);
   const [filters, setFilters] = useState<PublicCatalogFilters>({});
   const [searchInput, setSearchInput] = useState('');
-  const [logoTo, setLogoTo] = useState<string>('/dashboard');
+  const logoTo = useLogoDestination();
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const searchPlaceholder = useTypewriterPlaceholder([
@@ -80,17 +199,12 @@ export default function BrowsePage() {
   useEffect(() => {
     async function load() {
       try {
-        const [currentUser, userWithProfile] = await Promise.all([
-          getCurrentUser(),
-          getCurrentUserWithProfile(),
-        ]);
+        const currentUser = await getCurrentUser();
         setUser(currentUser);
         if (!currentUser) {
           navigate('/login', { replace: true, state: { from: '/browse' } });
           return;
         }
-        const role = userWithProfile?.profile?.role ?? '';
-        setLogoTo(['staff', 'admin', 'owner'].includes(role) ? '/admin' : '/dashboard');
         const [officesData] = await Promise.all([getAllOffices()]);
         setOffices(officesData ?? []);
       } catch (err) {
@@ -180,63 +294,125 @@ export default function BrowsePage() {
     return null;
   }
 
+  const activeFilterCount = [
+    filters.category,
+    filters.officeId,
+    filters.color,
+    filters.brand,
+    filters.dateFrom,
+    filters.dateTo,
+  ].filter(Boolean).length;
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b border-white/20 bg-background/40 backdrop-blur-2xl shadow-lg shadow-black/5">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-2">
           <Logo to={logoTo} />
-          <nav className="flex items-center gap-4 md:gap-6">
+          {/* Desktop nav */}
+          <nav className="hidden md:flex items-center gap-4 md:gap-6">
             <Link
               to="/dashboard"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
             >
               Dashboard
             </Link>
             <Link
               to="/browse"
-              className="text-sm font-medium text-primary"
+              className="text-sm font-medium text-primary whitespace-nowrap"
             >
               Browse Catalog
             </Link>
           </nav>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0 ml-auto">
             <ThemeToggle />
+            {/* Desktop: Sign Out / Sign In */}
             <Button
               variant="ghost"
               size="sm"
               onClick={handleSignOut}
-              className="text-muted-foreground hover:text-foreground"
+              className="hidden md:flex text-muted-foreground hover:text-foreground"
             >
               <LogOut className="w-4 h-4 mr-2" />
               Sign Out
             </Button>
+            {/* Mobile: Hamburger menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="md:hidden">
+                  <Menu className="w-5 h-5" />
+                  <span className="sr-only">Open menu</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem asChild>
+                  <Link to="/dashboard">Dashboard</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/browse">Browse Catalog</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleSignOut}>
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto mb-8">
-          <h1 className="font-display text-3xl font-bold text-foreground mb-2">
+        <div className="max-w-4xl mx-auto mb-6 md:mb-8">
+          <h1 className="font-display text-2xl md:text-3xl font-bold text-foreground mb-2">
             Browse Found Items
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground hidden md:block">
             Browse items reported by offices. Found something? Visit the office to claim it.
           </p>
         </div>
 
         {/* Search & Filters */}
-        <div className="max-w-4xl mx-auto mb-8 space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder={searchPlaceholder}
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="pl-9"
-            />
+        <div className="max-w-4xl mx-auto mb-6 md:mb-8 space-y-4">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder={searchPlaceholder}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            {/* Mobile: Filters button (opens bottom sheet) */}
+            <Drawer open={filtersOpen} onOpenChange={setFiltersOpen}>
+              <DrawerTrigger asChild>
+                <Button variant="outline" size="icon" className="shrink-0 md:hidden relative">
+                  <SlidersHorizontal className="w-5 h-5" />
+                  {activeFilterCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                  <span className="sr-only">Filters</span>
+                </Button>
+              </DrawerTrigger>
+              <DrawerContent>
+                <DrawerHeader>
+                  <DrawerTitle>Filters</DrawerTitle>
+                </DrawerHeader>
+                <div className="px-4 pb-8 space-y-4 max-h-[60vh] overflow-y-auto">
+                  <FiltersForm
+                    filters={filters}
+                    setFilters={setFilters}
+                    setSearchInput={setSearchInput}
+                    offices={offices}
+                    onApply={() => setFiltersOpen(false)}
+                  />
+                </div>
+              </DrawerContent>
+            </Drawer>
           </div>
-          <div className="flex flex-wrap gap-3">
+          {/* Desktop: Full filter row */}
+          <div className="hidden md:flex flex-wrap gap-3">
             <Select
               value={filters.category ?? 'all'}
               onValueChange={(v) =>
@@ -307,7 +483,7 @@ export default function BrowsePage() {
               }
               className="w-[140px]"
             />
-            {(filters.category || filters.officeId || filters.color || filters.brand || filters.dateFrom || filters.dateTo) && (
+            {activeFilterCount > 0 && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -339,7 +515,7 @@ export default function BrowsePage() {
               </Button>
             </div>
           ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 -mx-2 sm:mx-0 px-2 sm:px-0">
               {items.map((item) => (
                 <ItemCard
                   key={item.id}

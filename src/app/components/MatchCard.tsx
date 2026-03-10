@@ -11,9 +11,10 @@ interface MatchCardProps {
   isWatched?: boolean;
   onToggleWatch?: () => void;
   onViewDetails?: () => void;
+  onNotMine?: (match: Match) => void | Promise<void>;
 }
 
-export function MatchCard({ match, isWatched, onToggleWatch, onViewDetails }: MatchCardProps) {
+export function MatchCard({ match, isWatched, onToggleWatch, onViewDetails, onNotMine }: MatchCardProps) {
   const { foundItem, confidence } = match;
   const [isBouncing, setIsBouncing] = useState(false);
 
@@ -109,7 +110,12 @@ export function MatchCard({ match, isWatched, onToggleWatch, onViewDetails }: Ma
                 <Navigation className="w-3.5 h-3.5" />
                 Get Directions
               </Button>
-              <Button variant="ghost" size="sm" className="text-muted-foreground">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => void onNotMine?.(match)}
+              >
                 Not Mine
               </Button>
             </div>

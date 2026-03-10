@@ -41,6 +41,7 @@ import { Switch } from "@/components/ui/switch";
 import type { FoundItem, ItemFormData } from "@/types";
 import { categoryLabels } from "@/types";
 import { useTypewriterPlaceholder } from "@/hooks/useTypewriterPlaceholder";
+import { useLogoDestination } from "@/hooks/useLogoDestination";
 import confetti from "canvas-confetti";
 
 
@@ -71,7 +72,6 @@ function rowToFoundItem(row: any, profile: any): FoundItem {
     officeId: String(profile?.office_id ?? ""),
     officeName: String(profile?.office?.office_name ?? "Office"),
     officeLocation: officeLocation(profile),
-    foundLocation: row?.found_location ?? undefined,
     checkedInBy: String(profile?.full_name ?? ""),
     createdAt: String(row?.created_at ?? new Date().toISOString()),
     updatedAt: String(row?.updated_at ?? row?.created_at ?? new Date().toISOString()),
@@ -85,6 +85,7 @@ function rowToFoundItem(row: any, profile: any): FoundItem {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const logoTo = useLogoDestination();
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<FoundItem[]>([]);
@@ -106,10 +107,10 @@ export default function AdminDashboard() {
   const [selectedItem, setSelectedItem] = useState<FoundItem | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [inventoryView, setInventoryView] = useState<'grid' | 'map'>('grid');
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingItem, setEditingItem] = useState<FoundItem | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [inventoryView, setInventoryView] = useState<'grid' | 'map'>('grid');
   const [staffContext, setStaffContext] = useState<{ staffId: string; officeId: string }>({
     staffId: "",
     officeId: "",
@@ -405,12 +406,6 @@ export default function AdminDashboard() {
 
       toast({ title: "Item updated", description: "Changes saved successfully." });
       setShowEditModal(false);
-
-      // Trigger match recalculation server-side (fire and forget)
-      void supabase.functions.invoke("update-admin-matches", {
-        body: { foundItemId: editingItem.id, actor: "admin" },
-      });
-
       setEditingItem(null);
     } catch (err: any) {
       console.error(err);
@@ -439,7 +434,7 @@ export default function AdminDashboard() {
                 <ArrowLeft className="w-5 h-5" />
               </Button>
             </Link>
-            <Logo size="sm" to="/admin" />
+            <Logo size="sm" to={logoTo} />
             <Badge variant="outline" className="hidden sm:flex text-xs">
               Admin
             </Badge>
