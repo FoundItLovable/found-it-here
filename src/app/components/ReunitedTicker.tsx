@@ -7,11 +7,9 @@ export function ReunitedTicker() {
   useEffect(() => {
     const fetchCount = async () => {
       try {
-        const { count: reunited } = await supabase
-          .from('found_items')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'returned');
-        setCount(reunited ?? 0);
+        const { data, error } = await supabase.rpc('count_reunited_items');
+        if (error) throw error;
+        setCount(Number(data) ?? 0);
       } catch {
         setCount(0);
       }

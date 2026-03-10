@@ -331,7 +331,13 @@ export const updateFoundItem = async (
     .single();
 
   if (error) throw error;
-  return data as FoundItemRow;
+  const updated = data as FoundItemRow;
+
+  void requestAdminPotentialMatchUpdate(itemId).catch((err) =>
+    console.error("updateFoundItem: match update failed", err)
+  );
+
+  return updated;
 };
 
 export const deleteFoundItem = async (id: string): Promise<FoundItemRow> => {
@@ -422,7 +428,7 @@ export const createLostItemReport = async (
   return created;
 };
 
-const requestUserPotentialMatchUpdate = async (reportId: string): Promise<void> => {
+export const requestUserPotentialMatchUpdate = async (reportId: string): Promise<void> => {
   const trimmedReportId = String(reportId ?? "").trim();
   if (!trimmedReportId) throw new Error("reportId is required");
 

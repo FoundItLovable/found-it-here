@@ -31,6 +31,7 @@ import {
   createLostItemReport,
   updateLostItemReport,
   getUserReportPotentialMatches,
+  requestUserPotentialMatchUpdate,
   removeUserPotentialMatch,
   LostItemReportRow,
 } from '../../lib/database';
@@ -165,9 +166,15 @@ export default function UserDashboard() {
 
     let cancelled = false;
 
+    const activeReportIds = lostItems
+      .filter((item) => item.status === 'searching')
+      .map((item) => item.id)
+      .filter((id) => reportIdsToLoad.includes(id));
+
     async function preloadMatches() {
       setLoadingMatches(true);
       try {
+        // Step 1: Show existing matches immediately
         const loaded = await Promise.all(
           reportIdsToLoad.map(async (reportId) => {
             const potentialMatches = await getUserReportPotentialMatches(reportId);
@@ -184,10 +191,36 @@ export default function UserDashboard() {
           }
           return next;
         });
+        setLoadingMatches(false);
+
+        // Step 2: Refresh matches server-side for active reports, then reload
+        if (activeReportIds.length === 0) return;
+
+        await Promise.allSettled(
+          activeReportIds.map((reportId) => requestUserPotentialMatchUpdate(reportId))
+        );
+
+        if (cancelled) return;
+
+        const refreshed = await Promise.all(
+          activeReportIds.map(async (reportId) => {
+            const potentialMatches = await getUserReportPotentialMatches(reportId);
+            return [reportId, formatPotentialMatches(reportId, potentialMatches)] as const;
+          })
+        );
+
+        if (cancelled) return;
+
+        setMatches((prev) => {
+          const next = new Map(prev);
+          for (const [reportId, reportMatches] of refreshed) {
+            next.set(reportId, reportMatches);
+          }
+          return next;
+        });
       } catch (err) {
         if (cancelled) return;
-        const message =
-        err instanceof Error ? err.message : String(err);
+        const message = err instanceof Error ? err.message : String(err);
         console.error('[UserDashboard.preloadMatches] failed', err);
         toast({
           title: 'Error',
