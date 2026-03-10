@@ -1123,6 +1123,34 @@ export const uploadImage = async (file: File): Promise<string> => {
   return data.publicUrl;
 };
 
+// --------------------------------------------
+// REALTIME SUBSCRIPTIONS
+// --------------------------------------------
+
+export const subscribeToMatchChanges = (
+  reportIds: string[],
+  callback: (reportId: string, event: "INSERT" | "UPDATE" | "DELETE") => void
+): (() => void) => {
+  if (reportIds.length === 0) return () => {};
+
+  const channel = supabase
+    .channel(`potential_matches:${reportIds.join(",")}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "potential_matches" },
+      (payload) => {
+        const row = (payload.new ?? payload.old) as { report_id?: string } | null;
+        const reportId = String(row?.report_id ?? "").trim();
+        if (reportId && reportIds.includes(reportId)) {
+          callback(reportId, payload.eventType as "INSERT" | "UPDATE" | "DELETE");
+        }
+      }
+    )
+    .subscribe();
+
+  return () => { void supabase.removeChannel(channel); };
+};
+
 export const deleteImage = async (publicUrl: string): Promise<void> => {
   const url = String(publicUrl ?? "").trim();
   if (!url) return;

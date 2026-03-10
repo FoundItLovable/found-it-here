@@ -13,7 +13,11 @@ vi.mock('../../lib/database', () => ({
   getUserLostReports: vi.fn(),
   createLostItemReport: vi.fn(),
   updateLostItemReport: vi.fn(),
+  deleteLostItemReport: vi.fn().mockResolvedValue(undefined),
   getUserReportPotentialMatches: vi.fn().mockResolvedValue([]),
+  requestUserPotentialMatchUpdate: vi.fn().mockResolvedValue(undefined),
+  subscribeToMatchChanges: vi.fn().mockReturnValue(() => {}),
+  removeUserPotentialMatch: vi.fn().mockResolvedValue(undefined),
 }));
 
 import UserDashboard from './UserDashboard';

@@ -23,6 +23,7 @@ import { toast } from '@/hooks/use-toast';
 import { useTypewriterPlaceholder } from '@/hooks/useTypewriterPlaceholder';
 import { useWatchedMatches } from '@/hooks/useWatchedMatches';
 import { useLogoDestination } from '@/hooks/useLogoDestination';
+import { usePotentialMatches } from '@/hooks/usePotentialMatches';
 import { categoryIcons } from '@/types';
 
 import { signOut } from '../../lib/auth';
@@ -31,8 +32,7 @@ import {
   getUserLostReports,
   createLostItemReport,
   updateLostItemReport,
-  getUserReportPotentialMatches,
-  requestUserPotentialMatchUpdate,
+  deleteLostItemReport,
   removeUserPotentialMatch,
   LostItemReportRow,
 } from '../../lib/database';
@@ -65,31 +65,6 @@ const normalizeColorList = (value: string): string =>
     )
   ).join(',');
 
-// Convert database found item to frontend FoundItem type
-function dbFoundItemToFoundItem(row: any): FoundItem {
-  const office = row.office ?? row.staff?.office;
-  const normalizedImageUrl = Array.isArray(row?.image_urls)
-    ? row.image_urls[0]
-    : typeof row?.image_urls === 'string'
-      ? row.image_urls
-      : row?.image_url;
-  const normalizedStatus = String(row?.status ?? '').toLowerCase();
-
-  return {
-    id: row.id,
-    name: row.item_name ?? 'Unnamed item',
-    description: row.description ?? '',
-    category: (row.category as ItemCategory) ?? 'other',
-    dateFound: row.found_date ? String(row.found_date).slice(0, 10) : row.created_at?.slice(0, 10) ?? '',
-    imageUrl: normalizedImageUrl ?? undefined,
-    status: normalizedStatus === 'returned' ? 'returned' : normalizedStatus === 'claimed' ? 'claimed' : 'available',
-    officeId: office?.office_id ?? '',
-    officeName: office?.office_name ?? 'Unknown Office',
-    officeLocation: [office?.building_name, office?.office_address].filter(Boolean).join(' • ') || 'Unknown Location',
-    checkedInBy: row.staff?.full_name ?? '',
-    createdAt: row.created_at ?? new Date().toISOString(),
-  };
-}
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { UserDashboardSkeleton } from '@/components/skeletons/UserDashboardSkeleton';
@@ -102,27 +77,8 @@ export default function UserDashboard() {
   const { user, loading } = useAuthState();
   const [lostItems, setLostItems] = useState<LostItem[]>([]);
   const [selectedReport, setSelectedReport] = useState<LostItem | null>(null);
-  const [matches, setMatches] = useState<Map<string, Match[]>>(new Map());
-  const [loadingMatches, setLoadingMatches] = useState(false);
+  const { matches, loadingMatches } = usePotentialMatches(lostItems, user);
   const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
-
-  const formatPotentialMatches = (reportId: string, potentialMatches: any[]): Match[] => {
-    const availableMatches = potentialMatches.filter(
-      (row: any) => String(row?.foundItem?.status ?? '').toLowerCase() === 'available'
-    );
-
-    return availableMatches.map((row: any) => ({
-      id: String(row.matchId ?? `match-${reportId}-${row.foundItemId}`),
-      lostItemId: String(row.reportId ?? reportId),
-      foundItemId: String(row.foundItemId),
-      confidence: Number.isFinite(Number(row.confidence))
-        ? Number(row.confidence)
-        : Number.isFinite(Number(row.score))
-          ? Math.round(Number(row.score) * 100)
-          : 50,
-      foundItem: dbFoundItemToFoundItem(row.foundItem),
-    }));
-  };
   const [recoveringReportId, setRecoveringReportId] = useState<string | null>(null);
   const [showSuccessCheckmark, setShowSuccessCheckmark] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
@@ -144,87 +100,6 @@ export default function UserDashboard() {
       .then((reports) => setLostItems(reports.map(rowToLostItem)))
       .catch((err) => console.error('Failed to load reports:', err));
   }, [user, loading]);
-
-  // Preload matches for all reports once reports are loaded (no click-triggered fetches).
-  useEffect(() => {
-    if (!user || lostItems.length === 0) return;
-
-    const reportIdsToLoad = lostItems.map((item) => item.id).filter((id) => !matches.has(id));
-    if (reportIdsToLoad.length === 0) return;
-
-    let cancelled = false;
-
-    const activeReportIds = lostItems
-      .filter((item) => item.status === 'searching')
-      .map((item) => item.id)
-      .filter((id) => reportIdsToLoad.includes(id));
-
-    async function preloadMatches() {
-      setLoadingMatches(true);
-      try {
-        // Step 1: Show existing matches immediately
-        const loaded = await Promise.all(
-          reportIdsToLoad.map(async (reportId) => {
-            const potentialMatches = await getUserReportPotentialMatches(reportId);
-            return [reportId, formatPotentialMatches(reportId, potentialMatches)] as const;
-          })
-        );
-
-        if (cancelled) return;
-
-        setMatches((prev) => {
-          const next = new Map(prev);
-          for (const [reportId, reportMatches] of loaded) {
-            next.set(reportId, reportMatches);
-          }
-          return next;
-        });
-        setLoadingMatches(false);
-
-        // Step 2: Refresh matches server-side for active reports, then reload
-        if (activeReportIds.length === 0) return;
-
-        await Promise.allSettled(
-          activeReportIds.map((reportId) => requestUserPotentialMatchUpdate(reportId))
-        );
-
-        if (cancelled) return;
-
-        const refreshed = await Promise.all(
-          activeReportIds.map(async (reportId) => {
-            const potentialMatches = await getUserReportPotentialMatches(reportId);
-            return [reportId, formatPotentialMatches(reportId, potentialMatches)] as const;
-          })
-        );
-
-        if (cancelled) return;
-
-        setMatches((prev) => {
-          const next = new Map(prev);
-          for (const [reportId, reportMatches] of refreshed) {
-            next.set(reportId, reportMatches);
-          }
-          return next;
-        });
-      } catch (err) {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : String(err);
-        console.error('[UserDashboard.preloadMatches] failed', err);
-        toast({
-          title: 'Error',
-          description: `Failed to load potential matches: ${message}`,
-          variant: 'destructive',
-        });
-      } finally {
-        if (!cancelled) setLoadingMatches(false);
-      }
-    }
-
-    void preloadMatches();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, lostItems, matches]);
 
   const handleReportItem = async (data: {
     name: string;
@@ -259,10 +134,7 @@ export default function UserDashboard() {
       const newItem = rowToLostItem(created);
       setLostItems(prev => [newItem, ...prev]);
 
-      // Trigger server-side match computation (fire and forget)
-      void supabase.functions.invoke("update-user-matches", {
-        body: { reportId: created.id },
-      });
+      // Match computation triggered inside createLostItemReport
     } catch (err: any) {
       console.error('Failed to create report:', err);
       toast({
@@ -277,9 +149,7 @@ export default function UserDashboard() {
   const handleSignOut = async () => {
     try {
       await signOut();
-      setUser(null);
       setLostItems([]);
-      setMatches(new Map());
       toast({ title: 'Signed out', description: 'You have been signed out.' });
       navigate('/');
     } catch (err) {
@@ -329,18 +199,10 @@ export default function UserDashboard() {
 
     try {
       setDeletingReportId(reportId);
-      const { error: deleteError } = await supabase.functions.invoke("delete-lost-report", {
-        body: { reportId },
-      });
-      if (deleteError) throw deleteError;
+      await deleteLostItemReport(reportId);
 
       setLostItems(prev => prev.filter(item => item.id !== reportId));
       setSelectedReport(prev => (prev?.id === reportId ? null : prev));
-      setMatches(prev => {
-        const next = new Map(prev);
-        next.delete(reportId);
-        return next;
-      });
 
       toast({
         title: 'Report deleted',
