@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../lib/auth', () => ({
   getCurrentUser: vi.fn(),
+  getCurrentUserWithProfile: vi.fn(),
   signOut: vi.fn(),
 }));
 
@@ -15,7 +16,7 @@ vi.mock('../../lib/database', () => ({
 }));
 
 import UserDashboard from './UserDashboard';
-import { getCurrentUser } from '../../lib/auth';
+import { getCurrentUser, getCurrentUserWithProfile } from '../../lib/auth';
 import { getUserLostReports } from '../../lib/database';
 
 // ---------------------------------------------------------------------------
@@ -44,6 +45,7 @@ describe('UserDashboard', () => {
   describe('guest (not signed in)', () => {
     beforeEach(() => {
       vi.mocked(getCurrentUser).mockResolvedValue(null);
+      vi.mocked(getCurrentUserWithProfile).mockResolvedValue(null);
     });
 
     it('shows Sign In link in header', async () => {
@@ -84,6 +86,7 @@ describe('UserDashboard', () => {
   describe('logged in', () => {
     beforeEach(() => {
       vi.mocked(getCurrentUser).mockResolvedValue(mockUser);
+      vi.mocked(getCurrentUserWithProfile).mockResolvedValue({ ...mockUser, profile: { role: 'user' } });
     });
 
     it('shows Sign Out button in header', async () => {
