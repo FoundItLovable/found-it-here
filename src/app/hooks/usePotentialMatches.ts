@@ -3,7 +3,6 @@ import type { User } from '@supabase/supabase-js';
 import type { LostItem, Match, FoundItem, ItemCategory } from '@/types';
 import {
   getUserReportPotentialMatches,
-  requestUserPotentialMatchUpdate,
   subscribeToMatchChanges,
 } from '../../lib/database';
 
@@ -51,7 +50,7 @@ function formatPotentialMatches(reportId: string, potentialMatches: any[]): Matc
 export function usePotentialMatches(
   lostItems: LostItem[],
   user: User | null
-): { matches: Map<string, Match[]>; loadingMatches: boolean } {
+): { matches: Map<string, Match[]>; loadingMatches: boolean; removeMatch: (reportId: string, foundItemId: string) => void } {
   const [matches, setMatches] = useState<Map<string, Match[]>>(new Map());
   const [loadingMatches, setLoadingMatches] = useState(false);
   // Track which reportIds we've already loaded so re-renders don't re-fetch
@@ -74,7 +73,6 @@ export function usePotentialMatches(
     async function load() {
       setLoadingMatches(true);
       try {
-        // Step 1: Show cached matches immediately
         const initial = await Promise.all(
           reportIdsToLoad.map(async (reportId) => {
             const rows = await getUserReportPotentialMatches(reportId);
@@ -89,28 +87,6 @@ export function usePotentialMatches(
           return next;
         });
         for (const id of reportIdsToLoad) loadedRef.current.add(id);
-        setLoadingMatches(false);
-
-        // Step 2: Refresh active reports server-side, then reload
-        if (activeReportIds.length === 0) return;
-        await Promise.allSettled(
-          activeReportIds.map((id) => requestUserPotentialMatchUpdate(id))
-        );
-        if (cancelled) return;
-
-        const refreshed = await Promise.all(
-          activeReportIds.map(async (reportId) => {
-            const rows = await getUserReportPotentialMatches(reportId);
-            return [reportId, formatPotentialMatches(reportId, rows)] as const;
-          })
-        );
-        if (cancelled) return;
-
-        setMatches((prev) => {
-          const next = new Map(prev);
-          for (const [id, m] of refreshed) next.set(id, m);
-          return next;
-        });
       } catch (err) {
         if (!cancelled) console.error('[usePotentialMatches] load failed', err);
       } finally {
@@ -120,7 +96,7 @@ export function usePotentialMatches(
 
     void load();
 
-    // Step 3: Subscribe for live updates on active reports
+    // Subscribe for live updates on active reports
     const unsubscribe = subscribeToMatchChanges(
       activeReportIds,
       async (reportId, event) => {
@@ -154,5 +130,14 @@ export function usePotentialMatches(
     };
   }, [user, lostItems]);
 
-  return { matches, loadingMatches };
+  const removeMatch = (reportId: string, foundItemId: string) => {
+    setMatches((prev) => {
+      const next = new Map(prev);
+      const current = next.get(reportId) ?? [];
+      next.set(reportId, current.filter((m) => m.foundItemId !== foundItemId));
+      return next;
+    });
+  };
+
+  return { matches, loadingMatches, removeMatch };
 }
