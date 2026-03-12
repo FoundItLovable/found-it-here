@@ -281,6 +281,14 @@ export const createFoundItem = async (itemData: CreateFoundItemInput): Promise<F
     console.error("createFoundItem: potential match persistence failed", matchError);
   }
 
+  // Trigger email notifications for matching lost items asynchronously
+  try {
+    await requestMatchFoundNotifications(created.id, String(created.item_name ?? ""));
+  } catch (emailError) {
+    console.error("createFoundItem: match email notifications failed", emailError);
+    // Don't throw - email is secondary to the core feature
+  }
+
   return created;
 };
 
@@ -413,6 +421,20 @@ export const createLostItemReport = async (
   if (error) throw error;
   const created = data as LostItemReportRow;
 
+  // Trigger email notification asynchronously
+  try {
+    await requestEmailNotification({
+      type: "lost_item_submitted",
+      reportId: created.id,
+      userId: user.id,
+      itemName: String(created.item_name ?? ""),
+      category: String(created.category ?? ""),
+    });
+  } catch (emailError) {
+    console.error("createLostItemReport: email notification failed", emailError);
+    // Don't throw - email is secondary to the core feature
+  }
+
   try {
     await requestUserPotentialMatchUpdate(created.id);
   } catch (matchError) {
@@ -446,6 +468,41 @@ const requestUserPotentialMatchUpdate = async (reportId: string): Promise<void> 
       if (payload?.error) message = `${message}: ${payload.error}`;
     } catch {
       // ignore non-json error payload
+    }
+    throw new Error(message);
+  }
+};
+
+const requestMatchFoundNotifications = async (
+  foundItemId: string,
+  foundItemName: string
+): Promise<void> => {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) {
+    console.warn("No access token for match found notifications");
+    return;
+  }
+
+  const response = await fetch("/api/notifications/match-found", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      foundItemId,
+      foundItemName,
+    }),
+  });
+
+  if (!response.ok) {
+    let message = `Match found notification request failed (${response.status})`;
+    try {
+      const payload = await response.json();
+      if (payload?.error) message = `${message}: ${payload.error}`;
+    } catch {
+      // ignore
     }
     throw new Error(message);
   }
@@ -1130,4 +1187,45 @@ export const deleteImage = async (publicUrl: string): Promise<void> => {
 
   const { error } = await supabase.storage.from("item-images").remove([filePath]);
   if (error) throw error;
+};
+// Email notification helper
+interface EmailNotificationRequest {
+  type: "lost_item_submitted" | "match_found";
+  reportId?: string;
+  foundItemId?: string;
+  userId?: string;
+  itemName?: string;
+  category?: string;
+  matchScore?: number;
+}
+
+const requestEmailNotification = async (
+  req: EmailNotificationRequest
+): Promise<void> => {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) {
+    console.warn("No access token for email notification request");
+    return;
+  }
+
+  const response = await fetch("/api/notifications/email", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(req),
+  });
+
+  if (!response.ok) {
+    let message = `Email notification request failed (${response.status})`;
+    try {
+      const payload = await response.json();
+      if (payload?.error) message = `${message}: ${payload.error}`;
+    } catch {
+      // ignore
+    }
+    throw new Error(message);
+  }
 };

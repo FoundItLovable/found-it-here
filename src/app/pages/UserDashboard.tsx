@@ -212,6 +212,7 @@ export default function UserDashboard() {
     dateLost: string;
     locationLost: string;
     color?: string;
+    brand?: string;
   }) => {
     if (!user) {
       toast({
@@ -230,6 +231,7 @@ export default function UserDashboard() {
         description: data.description,
         category: data.category,
         color: cleanedColor || undefined,
+        brand: data.brand?.trim() || undefined,
         lost_date: data.dateLost,
         lost_location: data.locationLost,
         status: 'active',

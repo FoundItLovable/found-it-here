@@ -1,0 +1,407 @@
+# Email Alerts System - Architecture & Flows
+
+## System Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Frontend (React)                          │
+├─────────────────────────────────────────────────────────────────┤
+│  User Dashboard          │         Admin Dashboard              │
+│  ├─ Report Lost Item    │         ├─ Add Found Item           │
+│  ├─ View Matches       │         ├─ Upload Photos             │
+│  └─ Check Emails       │         └─ View Reports              │
+└────────────┬────────────────────────────┬──────────────────────┘
+             │                            │
+             │ HTTP Requests              │ HTTP Requests
+             │ (Bearer Token)             │ (Bearer Token)
+             ▼                            ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Express.js Server (Node)                      │
+├─────────────────────────────────────────────────────────────────┤
+│  Routes:                                                          │
+│  ├─ POST /api/notifications/email                              │
+│  ├─ POST /api/notifications/match-found                        │
+│  ├─ GET/POST /api/user/email-preferences                       │
+│  └─ GET /api/user/email-alerts                                 │
+└────────────┬──────────────────────────┬───────────────────────┘
+             │                          │
+             │ Import                   │ SMTP Connection
+             │                          │
+             ▼                          ▼
+        ┌─────────────┐            ┌─────────────────┐
+        │EmailService │            │  SMTP Provider  │
+        │(nodemailer) │───────────▶│ Gmail/SendGrid/ │
+        └─────────────┘            │  Mailgun/etc.   │
+             │                      └─────────────────┘
+             │ Records                      │
+             │                          Send email
+             ▼                              │
+┌─────────────────────────────────────────────────────────────────┐
+│                    Supabase (PostgreSQL)                         │
+├─────────────────────────────────────────────────────────────────┤
+│  Tables:                                                          │
+│  ├─ profiles                  │  email_alerts (NEW)            │
+│  │  ├─ email                  │  ├─ user_id                    │
+│  │  ├─ full_name             │  ├─ alert_type                 │
+│  │  └─ email_notifications_  │  ├─ email_address              │
+│  │     enabled (NEW)          │  ├─ status                     │
+│  │                            │  └─ created_at                 │
+│  ├─ lost_item_reports        │                                │
+│  │  └─ student_id            │  Other Tables:                 │
+│  │                            │  ├─ found_items               │
+│  └─ potential_matches         │  └─ claims                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Lost Item Submission Flow
+
+```
+┌──────────────────┐
+│  User Opens Form │
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────────────┐
+│  Fills in Lost Item Info │
+│  ├─ Item Name            │
+│  ├─ Category             │
+│  ├─ Description          │
+│  ├─ Color, Brand         │
+│  ├─ Where Lost           │
+│  └─ When Lost            │
+└────────┬─────────────────┘
+         │
+         ▼ Submit
+┌──────────────────────────────────────┐
+│  Frontend: createLostItemReport()    │
+└────────┬─────────────────────────────┘
+         │
+         ▼ Supabase Insert
+┌──────────────────────────────────────────────────────┐
+│  Database: INSERT INTO lost_item_reports            │
+│  • student_id (from auth)                           │
+│  • All item details                                 │
+│  Returns: report.id                                 │
+└────────┬───────────────────────────────────────────┘
+         │
+         ├─────────────────────────────┐
+         │                             │
+         ▼                             ▼
+  ┌──────────────────┐       ┌─────────────────────────┐
+  │Update Potential  │       │Request Email Notification
+  │Matches           │       │─────────────────────────
+  │(Async)           │       │POST /api/notifications/
+  └──────────────────┘       │email
+                              │
+                              ├─ type: "lost_item_submitted"
+                              ├─ userId: auth.user.id
+                              ├─ reportId: report.id
+                              ├─ itemName: item.name
+                              └─ category: item.category
+                              └──────────────┬──────────────
+                                             │
+                                             ▼
+                                    ┌──────────────────┐
+                                    │Get User from DB  │
+                                    │Get: email,       │
+                                    │      notifications
+                                    │      _enabled    │
+                                    └────────┬─────────┘
+                                             │
+                              ┌──────────────┴──────────────┐
+                              │ Is enabled?                │
+                              └──────────────┬──────────────┘
+                                        YES │  NO
+                              ┌─────────────▼──┐  ┌──────┐
+                              │Generate Email  │  │Skip  │
+                              │Template        │  └──────┘
+                              └────────┬──────┘
+                                       │
+                                       ▼
+                         ┌─────────────────────────┐
+                         │Send via EmailService    │
+                         │via SMTP                 │
+                         └────────┬────────────────┘
+                                  │
+                    ┌─────────────┴─────────────┐
+                    │ Success?                 │
+                    └─────────────┬─────────────┘
+                            YES │  FAIL
+                    ┌───────────▼──┐  ┌──────────────┐
+                    │Record: sent   │  │Record: failed│
+                    │in email_      │  │in email_     │
+                    │alerts         │  │alerts        │
+                    └───────────────┘  └──────────────┘
+                         │                     │
+                         └──────────┬──────────┘
+                                    │
+                                    ▼
+                         ┌────────────────────┐
+                         │Show Confirmation   │
+                         │to User             │
+                         │"Check Your Email"  │
+                         └────────────────────┘
+```
+
+## Match Found Flow
+
+```
+┌──────────────────────────┐
+│Admin Opens Add Item Form │
+└────────┬─────────────────┘
+         │
+         ▼
+┌──────────────────────────┐
+│  Fills in Found Item     │
+│  ├─ Item Name            │
+│  ├─ Category             │
+│  ├─ Description          │
+│  ├─ Color, Brand         │
+│  ├─ Where Found          │
+│  └─ Upload Photos        │
+└────────┬─────────────────┘
+         │
+         ▼ Submit
+┌──────────────────────────────────────┐
+│  Frontend: createFoundItem()         │
+└────────┬──────────────────────────────┘
+         │
+         ▼ Supabase Insert
+┌──────────────────────────────────────────────────────┐
+│  Database: INSERT INTO found_items                  │
+│  • office_id (from auth staff profile)              │
+│  • All item details                                 │
+│  Returns: item.id                                   │
+└────────┬───────────────────────────────────────────┘
+         │
+         ├─────────────────────────────┐
+         │                             │
+         ▼                             ▼
+  ┌──────────────────┐       ┌──────────────────────────┐
+  │Create Potential  │       │Request Match Found       │
+  │Matches           │       │Notifications             │
+  │(Server-side)     │       │─────────────────────────
+  └──────────────────┘       │POST /api/notifications/
+                              │match-found
+                              │
+                              ├─ foundItemId: item.id
+                              └─ foundItemName: item.name
+                              └──────────────┬──────────────
+                                             │
+                                             ▼
+                     ┌──────────────────────────────┐
+                     │Query: potential_matches      │
+                     │WHERE lost_item_id = ?        │
+                     │Get all matching lost reports │
+                     └──────────────┬───────────────┘
+                                    │
+                     ┌──────────────┴───────────────┐
+                     │ Any matches?                │
+                     └──────────────┬───────────────┘
+                               YES │  NO
+                    ┌──────────────▼──┐  ┌────────┐
+                    │Group by user_id  │  │Return  │
+                    └────────┬─────────┘  │"0"    │
+                             │            └────────┘
+                             ▼
+                ┌──────────────────────────────┐
+                │ For Each User With Matches   │
+                └──────────────┬───────────────┘
+                               │
+        ┌──────────────────────┴──────────────────────┐
+        │                                             │
+        ▼                                             │
+┌──────────────────────────────────┐                │
+│Get User Profile:                 │                │
+│├─ email                          │                │
+│├─ full_name                      │                │
+│└─ email_notifications_enabled?  │                │
+└──────────────┬───────────────────┘                │
+               │                                    │
+       ┌───────┴─────────┐                         │
+       │ Is enabled?    │                         │
+       └───────┬─────────┘                         │
+           YES │  NO                               │
+    ┌─────────▼──┐  ┌──────┐                       │
+    │Generate    │  │Skip  │                       │
+    │Email       │  │this  │◄──────────┐           │
+    │Template    │  │user  │           │           │
+    └────┬───────┘  └──────┘           │           │
+         │                              │           │
+         ▼                              │           │
+┌──────────────────────────────────────┼───────────┤
+│ Check match count:                   │           │
+│├─ 1 match? Send single match email   │           │
+│└─ Multiple? Send batch email         │           │
+└──────────────┬───────────────────────┼───────────┤
+               │                       │           │
+               ▼                       │           │
+        ┌────────────────────┐         │           │
+        │Send via EmailService         │           │
+        │& SMTP              │         │           │
+        └────────┬───────────┘         │           │
+                 │                     │           │
+        ┌────────┴─────┐               │           │
+        │ Success?    │               │           │
+        └────────┬─────┘               │           │
+            YES │ FAIL                │           │
+        ┌───────▼──┐  ┌──────────────┐│           │
+        │Record:   │  │Record:       ││           │
+        │sent in   │  │failed in     ││           │
+        │email_    │  │email_        ││           │
+        │alerts    │  │alerts        ││           │
+        └──────────┘  └──────────────┘│           │
+             │               │         │           │
+             └───────┬───────┘         │           │
+                     │                 │           │
+                     │                 │           │
+        ┌────────────▼─────────────────┴───────────┤
+        │ Next user in list                        │
+        └────────────┬──────────────────────────────┤
+                     │                             │
+                     ▼                             │
+                  ┌─────┐                          │
+                  │Done?│                          │
+                  └──┬──┘                          │
+                   YES│                            │
+                     │                             │
+                     ▼                             │
+         ┌──────────────────────────────┐         │
+         │Show Success Message           │         │
+         │"Sent X emails to Y users"     │         │
+         └──────────────────────────────┘         │
+```
+
+## Data Model Relationships
+
+```
+┌──────────────────────────────┐
+│      profiles                │
+├──────────────────────────────┤
+│ id (UUID) ★                  │
+│ email                        │
+│ full_name                    │
+│ email_notifications_enabled ●│
+│ office_id (FK)               │
+└──────────────────────────────┘
+         ▲                   ▲
+         │                   │
+   ┌─────┴─────┐        ┌────┴────────┐
+   │ student_id│        │ claimant_id │
+   │(Many)     │        │(Many)       │
+   │           │        │             │
+┌──┴───────────────────┐ ┌────────────┴──┐
+│ lost_item_reports    │ │ claims         │
+├──────────────────────┤ ├────────────────┤
+│ id (UUID) ★          │ │ id (UUID) ★    │
+│ student_id (FK)      │ │ claimant_id(FK)│
+│ item_name            │ │ found_item_id  │
+│ category             │ │ (FK)           │
+│ status               │ │ review_status  │
+│ created_at           │ └────────────────┘
+└──────────────────────┘          ▲
+         ▲                        │
+         │                   ┌────┴──────────┐
+    found_item_id            │ (Many)        │
+         │                   │               │
+┌────────┴─────────────────┐ ┌────────────┐ │
+│ potential_matches        │ │ found_items│ │
+├──────────────────────────┤ ├────────────┤ │
+│ match_id ★               │ │ id (UUID)★ │ │
+│ report_id (FK) ●●●●      │ │ office_id  │ │
+│ lost_item_id (FK) ●●●●   │ │ item_name  │ │
+│                          │ │ category   │ │
+└──────────────────────────┘ │ status     │ │
+                             └────────────┘ │
+                                     ▲      │
+                                     │ (Many│)
+                             ┌───────┴─────────┐
+                             │ email_alerts ●●●│
+                             ├──────────────────┤
+                             │ id (UUID) ★      │
+                             │ user_id (FK)     │
+                             │ report_id (FK?)  │
+                             │ found_item_id(FK?)
+                             │ alert_type       │
+                             │ email_address    │
+                             │ subject          │
+                             │ status           │
+                             │ created_at       │
+                             └──────────────────┘
+
+★ = Primary Key
+FK = Foreign Key
+● = Referenced by email_alerts
+```
+
+## Component Interaction Sequence
+
+```
+User                Frontend          Server            Supabase    Email Service
+ │                    │                  │                 │              │
+ │─Report Lost Item──▶│                  │                 │              │
+ │                    │─API Call────────▶│                 │              │
+ │                    │                  │─Query Profile──▶│              │
+ │                    │                  │◀────User Data───│              │
+ │                    │                  │                 │              │
+ │                    │                  │─Insert Report──▶│              │
+ │                    │                  │◀────report.id───│              │
+ │                    │                  │                 │              │
+ │                    │                  │─POST email endpoint──────────▶│
+ │                    │                  │                 │  Generate   │
+ │                    │                  │                 │  Template   │
+ │                    │                  │                 │             │
+ │                    │                  │                 │◀────────────│
+ │                    │                  │◀────────────────────Send Email
+ │                    │                  │                 │             │
+ │                    │◀───Success────────│                 │             │
+ │◀────Toast Message──│                  │                 │             │
+ │                    │                  │─Insert in email │             │
+ │                    │                  │  _alerts────────▶             │
+ │                    │                  │                 │             │
+ │                    │                  │                 │   User      │
+ │                    │                  │                 │  Receives   │
+ │                    │                  │                 │   Email ✓   │
+```
+
+## Email Status Lifecycle
+
+```
+Email Sent Event
+      │
+      ▼
+┌────────────────────┐
+│ Create Email Alert │
+│ (Pending Status)   │
+└────────┬───────────┘
+         │
+         ▼
+    ┌─────────────┐
+    │ Send Email  │
+    └────┬────────┘
+         │
+    ┌────┴──────────────────┐
+    │                       │
+    ▼                       ▼
+┌────────────┐        ┌──────────────┐
+│  Success   │        │  Failure     │
+│  Status:   │        │  Status:     │
+│  "sent"    │        │  "failed"    │
+│  + sent_at │        │  + error_msg │
+└────────────┘        └──────────────┘
+    │                       │
+    └───────────┬───────────┘
+                │
+                ▼
+         ┌────────────────┐
+         │ Stored in DB   │
+         │ for audit trail│
+         └────────────────┘
+                │
+                ▼
+         ┌────────────────┐
+         │ User can query │
+         │ email history  │
+         └────────────────┘
+```
+
