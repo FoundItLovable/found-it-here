@@ -61,6 +61,17 @@ CREATE TYPE "public"."app_role" AS ENUM (
 ALTER TYPE "public"."app_role" OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."count_reunited_items"() RETURNS bigint
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  SELECT count(*)::bigint FROM found_items WHERE status = 'returned';
+$$;
+
+
+ALTER FUNCTION "public"."count_reunited_items"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."create_notification"("p_user_id" "uuid", "p_title" "text", "p_message" "text", "p_notification_type" "text", "p_related_item_id" "uuid" DEFAULT NULL::"uuid", "p_related_item_type" "text" DEFAULT NULL::"text") RETURNS "uuid"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -222,6 +233,41 @@ $$;
 ALTER FUNCTION "public"."notify_claim_reviewed"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."record_email_alert"("p_user_id" "uuid", "p_alert_type" "text", "p_email" "text", "p_subject" "text", "p_report_id" "uuid" DEFAULT NULL::"uuid", "p_found_item_id" "uuid" DEFAULT NULL::"uuid", "p_status" "text" DEFAULT 'sent'::"text", "p_error_message" "text" DEFAULT NULL::"text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+  alert_id UUID;
+BEGIN
+  INSERT INTO email_alerts (
+    user_id,
+    alert_type,
+    email_address,
+    subject,
+    report_id,
+    found_item_id,
+    status,
+    error_message
+  ) VALUES (
+    p_user_id,
+    p_alert_type,
+    p_email,
+    p_subject,
+    p_report_id,
+    p_found_item_id,
+    p_status,
+    p_error_message
+  )
+  RETURNING id INTO alert_id;
+
+  RETURN alert_id;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."record_email_alert"("p_user_id" "uuid", "p_alert_type" "text", "p_email" "text", "p_subject" "text", "p_report_id" "uuid", "p_found_item_id" "uuid", "p_status" "text", "p_error_message" "text") OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."found_items" (
     "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
     "office_id" "uuid" NOT NULL,
@@ -321,6 +367,36 @@ CREATE TABLE IF NOT EXISTS "public"."claims" (
 ALTER TABLE "public"."claims" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."email_alerts" (
+    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "report_id" "uuid",
+    "found_item_id" "uuid",
+    "alert_type" "text" NOT NULL,
+    "email_sent_at" timestamp with time zone DEFAULT "now"(),
+    "email_address" "text" NOT NULL,
+    "subject" "text" NOT NULL,
+    "status" "text" DEFAULT 'sent'::"text",
+    "error_message" "text",
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."email_alerts" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."email_alerts" IS 'Tracks email alerts sent to users for lost items and potential matches';
+
+
+
+COMMENT ON COLUMN "public"."email_alerts"."alert_type" IS 'Type of alert: lost_item_submitted, match_found';
+
+
+
+COMMENT ON COLUMN "public"."email_alerts"."status" IS 'Email delivery status: sent, failed, bounced';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."notifications" (
     "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
     "user_id" "uuid" NOT NULL,
@@ -395,6 +471,7 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
     "updated_at" timestamp with time zone DEFAULT "now"(),
     "organization_id" "uuid",
     "role" "text",
+    "email_notifications_enabled" boolean DEFAULT true,
     CONSTRAINT "profiles_role_check" CHECK (("role" = ANY (ARRAY['admin'::"text", 'owner'::"text", 'staff'::"text", 'user'::"text"])))
 );
 
@@ -498,6 +575,11 @@ ALTER TABLE ONLY "public"."claims"
 
 
 
+ALTER TABLE ONLY "public"."email_alerts"
+    ADD CONSTRAINT "email_alerts_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."found_items"
     ADD CONSTRAINT "found_items_pkey" PRIMARY KEY ("id");
 
@@ -550,6 +632,30 @@ CREATE INDEX "idx_claims_student" ON "public"."claims" USING "btree" ("claimant_
 
 
 
+CREATE INDEX "idx_email_alerts_created" ON "public"."email_alerts" USING "btree" ("created_at" DESC);
+
+
+
+CREATE INDEX "idx_email_alerts_found_item" ON "public"."email_alerts" USING "btree" ("found_item_id");
+
+
+
+CREATE INDEX "idx_email_alerts_report" ON "public"."email_alerts" USING "btree" ("report_id");
+
+
+
+CREATE INDEX "idx_email_alerts_status" ON "public"."email_alerts" USING "btree" ("status");
+
+
+
+CREATE INDEX "idx_email_alerts_type" ON "public"."email_alerts" USING "btree" ("alert_type");
+
+
+
+CREATE INDEX "idx_email_alerts_user" ON "public"."email_alerts" USING "btree" ("user_id");
+
+
+
 CREATE INDEX "idx_found_items_category" ON "public"."found_items" USING "btree" ("category");
 
 
@@ -583,6 +689,18 @@ CREATE INDEX "idx_notifications_unread" ON "public"."notifications" USING "btree
 
 
 CREATE INDEX "idx_notifications_user" ON "public"."notifications" USING "btree" ("user_id");
+
+
+
+CREATE INDEX "idx_potential_matches_lost_item_id" ON "public"."potential_matches" USING "btree" ("lost_item_id");
+
+
+
+CREATE INDEX "idx_potential_matches_report_id" ON "public"."potential_matches" USING "btree" ("report_id");
+
+
+
+CREATE UNIQUE INDEX "idx_potential_matches_report_lost_unique" ON "public"."potential_matches" USING "btree" ("report_id", "lost_item_id");
 
 
 
@@ -626,6 +744,21 @@ ALTER TABLE ONLY "public"."claims"
 
 ALTER TABLE ONLY "public"."claims"
     ADD CONSTRAINT "claims_reviewed_by_fkey" FOREIGN KEY ("reviewed_by") REFERENCES "public"."profiles"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."email_alerts"
+    ADD CONSTRAINT "email_alerts_found_item_id_fkey" FOREIGN KEY ("found_item_id") REFERENCES "public"."found_items"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."email_alerts"
+    ADD CONSTRAINT "email_alerts_report_id_fkey" FOREIGN KEY ("report_id") REFERENCES "public"."lost_item_reports"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."email_alerts"
+    ADD CONSTRAINT "email_alerts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
 
 
 
@@ -787,6 +920,9 @@ CREATE POLICY "claims_update_safe" ON "public"."claims" FOR UPDATE TO "authentic
 
 
 
+ALTER TABLE "public"."email_alerts" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."found_items" ENABLE ROW LEVEL SECURITY;
 
 
@@ -903,6 +1039,34 @@ CREATE POLICY "pm_select_user_own" ON "public"."potential_matches" FOR SELECT TO
 ALTER TABLE "public"."potential_matches" ENABLE ROW LEVEL SECURITY;
 
 
+CREATE POLICY "potential_matches_delete_own_reports" ON "public"."potential_matches" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."lost_item_reports" "lr"
+  WHERE (("lr"."id" = "potential_matches"."report_id") AND ("lr"."student_id" = "auth"."uid"())))));
+
+
+
+CREATE POLICY "potential_matches_insert_staff_org" ON "public"."potential_matches" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1
+   FROM (("public"."profiles" "me"
+     JOIN "public"."found_items" "fi" ON (("fi"."id" = "potential_matches"."lost_item_id")))
+     JOIN "public"."offices" "o" ON (("o"."office_id" = "fi"."office_id")))
+  WHERE (("me"."id" = "auth"."uid"()) AND ("me"."role" = ANY (ARRAY['staff'::"text", 'admin'::"text", 'owner'::"text"])) AND ("me"."organization_id" IS NOT NULL) AND ("o"."organization_id" = "me"."organization_id")))));
+
+
+
+CREATE POLICY "potential_matches_select_own_reports" ON "public"."potential_matches" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."lost_item_reports" "lr"
+  WHERE (("lr"."id" = "potential_matches"."report_id") AND ("lr"."student_id" = "auth"."uid"())))));
+
+
+
+CREATE POLICY "potential_matches_select_staff_org" ON "public"."potential_matches" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM (("public"."profiles" "me"
+     JOIN "public"."found_items" "fi" ON (("fi"."id" = "potential_matches"."lost_item_id")))
+     JOIN "public"."offices" "o" ON (("o"."office_id" = "fi"."office_id")))
+  WHERE (("me"."id" = "auth"."uid"()) AND ("me"."role" = ANY (ARRAY['staff'::"text", 'admin'::"text", 'owner'::"text"])) AND ("me"."organization_id" IS NOT NULL) AND ("o"."organization_id" = "me"."organization_id")))));
+
+
+
 ALTER TABLE "public"."profiles" ENABLE ROW LEVEL SECURITY;
 
 
@@ -922,6 +1086,10 @@ CREATE POLICY "profiles_update_own" ON "public"."profiles" FOR UPDATE USING (("a
 
 
 
+CREATE POLICY "service_role_insert_email_alerts" ON "public"."email_alerts" FOR INSERT WITH CHECK (true);
+
+
+
 CREATE POLICY "staff_select_all_lost_reports" ON "public"."lost_item_reports" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
    FROM ("public"."profiles" "me"
      JOIN "public"."profiles" "reporter" ON (("reporter"."id" = "lost_item_reports"."student_id")))
@@ -932,6 +1100,10 @@ CREATE POLICY "staff_select_all_lost_reports" ON "public"."lost_item_reports" FO
 CREATE POLICY "users read only own org" ON "public"."organizations" FOR SELECT USING (("auth"."uid"() IN ( SELECT "profiles"."id"
    FROM "public"."profiles"
   WHERE ("profiles"."organization_id" = "organizations"."organization_id"))));
+
+
+
+CREATE POLICY "users_view_own_email_alerts" ON "public"."email_alerts" FOR SELECT USING (("auth"."uid"() = "user_id"));
 
 
 
@@ -1113,6 +1285,12 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 
+GRANT ALL ON FUNCTION "public"."count_reunited_items"() TO "anon";
+GRANT ALL ON FUNCTION "public"."count_reunited_items"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."count_reunited_items"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."create_notification"("p_user_id" "uuid", "p_title" "text", "p_message" "text", "p_notification_type" "text", "p_related_item_id" "uuid", "p_related_item_type" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."create_notification"("p_user_id" "uuid", "p_title" "text", "p_message" "text", "p_notification_type" "text", "p_related_item_id" "uuid", "p_related_item_type" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."create_notification"("p_user_id" "uuid", "p_title" "text", "p_message" "text", "p_notification_type" "text", "p_related_item_id" "uuid", "p_related_item_type" "text") TO "service_role";
@@ -1146,6 +1324,12 @@ GRANT ALL ON FUNCTION "public"."handle_new_user"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."notify_claim_reviewed"() TO "anon";
 GRANT ALL ON FUNCTION "public"."notify_claim_reviewed"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."notify_claim_reviewed"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."record_email_alert"("p_user_id" "uuid", "p_alert_type" "text", "p_email" "text", "p_subject" "text", "p_report_id" "uuid", "p_found_item_id" "uuid", "p_status" "text", "p_error_message" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."record_email_alert"("p_user_id" "uuid", "p_alert_type" "text", "p_email" "text", "p_subject" "text", "p_report_id" "uuid", "p_found_item_id" "uuid", "p_status" "text", "p_error_message" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."record_email_alert"("p_user_id" "uuid", "p_alert_type" "text", "p_email" "text", "p_subject" "text", "p_report_id" "uuid", "p_found_item_id" "uuid", "p_status" "text", "p_error_message" "text") TO "service_role";
 
 
 
@@ -1185,6 +1369,12 @@ GRANT ALL ON FUNCTION "public"."update_updated_at_column"() TO "service_role";
 GRANT ALL ON TABLE "public"."claims" TO "anon";
 GRANT ALL ON TABLE "public"."claims" TO "authenticated";
 GRANT ALL ON TABLE "public"."claims" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."email_alerts" TO "anon";
+GRANT ALL ON TABLE "public"."email_alerts" TO "authenticated";
+GRANT ALL ON TABLE "public"."email_alerts" TO "service_role";
 
 
 

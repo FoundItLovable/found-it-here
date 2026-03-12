@@ -1,6 +1,6 @@
 -- =============================================================================
 -- SUPABASE SCHEMA — Full dump from remote database
--- Last updated: 2026-03-03 (regenerated from supabase db dump)
+-- Last updated: 2026-03-10 (regenerated from supabase db dump)
 -- =============================================================================
 
 -- Extensions
@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS "public"."profiles" (
     "updated_at" timestamp with time zone DEFAULT "now"(),
     "organization_id" "uuid",
     "role" "text",
+    "email_notifications_enabled" boolean DEFAULT true,
     CONSTRAINT "profiles_role_check" CHECK (("role" = ANY (ARRAY['admin'::"text", 'owner'::"text", 'staff'::"text", 'user'::"text"])))
 );
 
@@ -157,11 +158,32 @@ CREATE TABLE IF NOT EXISTS "public"."notifications" (
     "created_at" timestamp with time zone DEFAULT "now"()
 );
 
+-- email_alerts: tracks email notifications sent to users for lost items and potential matches
+CREATE TABLE IF NOT EXISTS "public"."email_alerts" (
+    "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "report_id" "uuid",
+    "found_item_id" "uuid",
+    "alert_type" "text" NOT NULL,
+    "email_sent_at" timestamp with time zone DEFAULT "now"(),
+    "email_address" "text" NOT NULL,
+    "subject" "text" NOT NULL,
+    "status" "text" DEFAULT 'sent'::"text",
+    "error_message" "text",
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+COMMENT ON TABLE "public"."email_alerts" IS 'Tracks email alerts sent to users for lost items and potential matches';
+COMMENT ON COLUMN "public"."email_alerts"."alert_type" IS 'Type of alert: lost_item_submitted, match_found';
+COMMENT ON COLUMN "public"."email_alerts"."status" IS 'Email delivery status: sent, failed, bounced';
+
 -- potential_matches: stores pre-computed match pairs between lost reports and found items
+-- score: normalized match score (0.0–1.0) computed by the matching algorithm
 CREATE TABLE IF NOT EXISTS "public"."potential_matches" (
     "report_id" "uuid" NOT NULL,
     "lost_item_id" "uuid" NOT NULL,
-    "match_id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL
+    "match_id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "score" real
 );
 
 -- =============================================================================
@@ -215,6 +237,9 @@ ALTER TABLE ONLY "public"."claims"
 ALTER TABLE ONLY "public"."notifications"
     ADD CONSTRAINT "notifications_pkey" PRIMARY KEY ("id");
 
+ALTER TABLE ONLY "public"."email_alerts"
+    ADD CONSTRAINT "email_alerts_pkey" PRIMARY KEY ("id");
+
 ALTER TABLE ONLY "public"."potential_matches"
     ADD CONSTRAINT "potential_matches_pkey" PRIMARY KEY ("match_id");
 
@@ -225,15 +250,31 @@ ALTER TABLE ONLY "public"."potential_matches"
 CREATE INDEX "idx_claims_found_item" ON "public"."claims" USING "btree" ("found_item_id");
 CREATE INDEX "idx_claims_status" ON "public"."claims" USING "btree" ("review_status");
 CREATE INDEX "idx_claims_student" ON "public"."claims" USING "btree" ("claimant_id");
+
+CREATE INDEX "idx_email_alerts_created" ON "public"."email_alerts" USING "btree" ("created_at" DESC);
+CREATE INDEX "idx_email_alerts_found_item" ON "public"."email_alerts" USING "btree" ("found_item_id");
+CREATE INDEX "idx_email_alerts_report" ON "public"."email_alerts" USING "btree" ("report_id");
+CREATE INDEX "idx_email_alerts_status" ON "public"."email_alerts" USING "btree" ("status");
+CREATE INDEX "idx_email_alerts_type" ON "public"."email_alerts" USING "btree" ("alert_type");
+CREATE INDEX "idx_email_alerts_user" ON "public"."email_alerts" USING "btree" ("user_id");
+
 CREATE INDEX "idx_found_items_category" ON "public"."found_items" USING "btree" ("category");
 CREATE INDEX "idx_found_items_coords" ON "public"."found_items" USING "btree" ("latitude", "longitude") WHERE (("latitude" IS NOT NULL) AND ("longitude" IS NOT NULL));
 CREATE INDEX "idx_found_items_created_at" ON "public"."found_items" USING "btree" ("created_at" DESC);
 CREATE INDEX "idx_found_items_status" ON "public"."found_items" USING "btree" ("status");
+
 CREATE INDEX "idx_lost_item_reports_coords" ON "public"."lost_item_reports" USING "btree" ("latitude", "longitude") WHERE (("latitude" IS NOT NULL) AND ("longitude" IS NOT NULL));
 CREATE INDEX "idx_lost_reports_status" ON "public"."lost_item_reports" USING "btree" ("status");
 CREATE INDEX "idx_lost_reports_student" ON "public"."lost_item_reports" USING "btree" ("student_id");
+
 CREATE INDEX "idx_notifications_unread" ON "public"."notifications" USING "btree" ("user_id", "is_read") WHERE ("is_read" = false);
 CREATE INDEX "idx_notifications_user" ON "public"."notifications" USING "btree" ("user_id");
+
+-- potential_matches indexes (added via migrations)
+CREATE INDEX "idx_potential_matches_lost_item_id" ON "public"."potential_matches" USING "btree" ("lost_item_id");
+CREATE INDEX "idx_potential_matches_report_id" ON "public"."potential_matches" USING "btree" ("report_id");
+CREATE UNIQUE INDEX "idx_potential_matches_report_lost_unique" ON "public"."potential_matches" USING "btree" ("report_id", "lost_item_id");
+
 CREATE INDEX "idx_profiles_office_id" ON "public"."profiles" USING "btree" ("office_id");
 CREATE INDEX "idx_profiles_organization_id" ON "public"."profiles" USING "btree" ("organization_id");
 
@@ -249,6 +290,15 @@ ALTER TABLE ONLY "public"."claims"
 
 ALTER TABLE ONLY "public"."claims"
     ADD CONSTRAINT "claims_reviewed_by_fkey" FOREIGN KEY ("reviewed_by") REFERENCES "public"."profiles"("id") ON DELETE SET NULL;
+
+ALTER TABLE ONLY "public"."email_alerts"
+    ADD CONSTRAINT "email_alerts_found_item_id_fkey" FOREIGN KEY ("found_item_id") REFERENCES "public"."found_items"("id") ON DELETE CASCADE;
+
+ALTER TABLE ONLY "public"."email_alerts"
+    ADD CONSTRAINT "email_alerts_report_id_fkey" FOREIGN KEY ("report_id") REFERENCES "public"."lost_item_reports"("id") ON DELETE CASCADE;
+
+ALTER TABLE ONLY "public"."email_alerts"
+    ADD CONSTRAINT "email_alerts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."profiles"("id") ON DELETE CASCADE;
 
 -- found_items.office_id references offices (not profiles); no ON DELETE rule in remote DB
 ALTER TABLE ONLY "public"."found_items"
@@ -281,6 +331,17 @@ ALTER TABLE ONLY "public"."profiles"
 -- =============================================================================
 -- FUNCTIONS
 -- =============================================================================
+
+-- Count found items that have been returned (status = 'returned').
+-- SECURITY DEFINER bypasses RLS so the anon role can get an accurate count
+-- even though RLS only permits anon SELECT on status = 'available'.
+-- Used by ReunitedTicker component.
+CREATE OR REPLACE FUNCTION "public"."count_reunited_items"() RETURNS bigint
+    LANGUAGE "sql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+  SELECT count(*)::bigint FROM found_items WHERE status = 'returned';
+$$;
 
 -- Auto-create profile on signup
 -- Note: does NOT insert organization_id (that is set separately after signup)
@@ -427,6 +488,38 @@ CREATE OR REPLACE FUNCTION "public"."get_org_lost_reports"() RETURNS SETOF "publ
     and reporter.organization_id = me.organization_id;
 $$;
 
+-- Record an email alert sent to a user (used by edge functions)
+CREATE OR REPLACE FUNCTION "public"."record_email_alert"("p_user_id" "uuid", "p_alert_type" "text", "p_email" "text", "p_subject" "text", "p_report_id" "uuid" DEFAULT NULL::"uuid", "p_found_item_id" "uuid" DEFAULT NULL::"uuid", "p_status" "text" DEFAULT 'sent'::"text", "p_error_message" "text" DEFAULT NULL::"text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+  alert_id UUID;
+BEGIN
+  INSERT INTO email_alerts (
+    user_id,
+    alert_type,
+    email_address,
+    subject,
+    report_id,
+    found_item_id,
+    status,
+    error_message
+  ) VALUES (
+    p_user_id,
+    p_alert_type,
+    p_email,
+    p_subject,
+    p_report_id,
+    p_found_item_id,
+    p_status,
+    p_error_message
+  )
+  RETURNING id INTO alert_id;
+
+  RETURN alert_id;
+END;
+$$;
+
 -- =============================================================================
 -- TRIGGERS
 -- =============================================================================
@@ -451,6 +544,7 @@ CREATE OR REPLACE TRIGGER "on_claim_reviewed" AFTER UPDATE ON "public"."claims" 
 
 ALTER TABLE "public"."found_items" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."claims" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."email_alerts" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."lost_item_reports" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."notifications" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."offices" ENABLE ROW LEVEL SECURITY;
@@ -478,6 +572,10 @@ CREATE POLICY "Staff can update claims for their items" ON "public"."claims" FOR
 CREATE POLICY "claims_update_safe" ON "public"."claims" FOR UPDATE TO "authenticated" USING (("auth"."uid"() IN ( SELECT "found_items"."office_id" AS "staff_id" FROM "public"."found_items" WHERE ("found_items"."id" = "claims"."found_item_id"))));
 CREATE POLICY "claims_update_own_pending" ON "public"."claims" FOR UPDATE USING ((("auth"."uid"() = "claimant_id") AND ("review_status" = 'pending'::"text")));
 CREATE POLICY "claims_delete_own_pending" ON "public"."claims" FOR DELETE USING ((("auth"."uid"() = "claimant_id") AND ("review_status" = 'pending'::"text")));
+
+-- Email Alerts policies
+CREATE POLICY "service_role_insert_email_alerts" ON "public"."email_alerts" FOR INSERT WITH CHECK (true);
+CREATE POLICY "users_view_own_email_alerts" ON "public"."email_alerts" FOR SELECT USING (("auth"."uid"() = "user_id"));
 
 -- Lost Item Reports policies
 CREATE POLICY "Users can create lost reports" ON "public"."lost_item_reports" FOR INSERT WITH CHECK (("auth"."uid"() = "student_id"));
@@ -524,9 +622,16 @@ CREATE POLICY "users read only own org" ON "public"."organizations" FOR SELECT U
 CREATE POLICY "organizations_select_all_for_signup" ON "public"."organizations" FOR SELECT USING (true);
 
 -- Potential Matches policies
+-- User-scoped policies: users can read/write their own report's matches
 CREATE POLICY "pm_select_user_own" ON "public"."potential_matches" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1 FROM "public"."lost_item_reports" "r" WHERE (("r"."id" = "potential_matches"."report_id") AND ("r"."student_id" = "auth"."uid"())))));
 CREATE POLICY "pm_insert_user_own" ON "public"."potential_matches" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1 FROM "public"."lost_item_reports" "r" WHERE (("r"."id" = "potential_matches"."report_id") AND ("r"."student_id" = "auth"."uid"())))));
 CREATE POLICY "pm_delete_user_own" ON "public"."potential_matches" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1 FROM "public"."lost_item_reports" "r" WHERE (("r"."id" = "potential_matches"."report_id") AND ("r"."student_id" = "auth"."uid"())))));
+-- Broader user-scoped policies (select/delete by report ownership)
+CREATE POLICY "potential_matches_select_own_reports" ON "public"."potential_matches" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1 FROM "public"."lost_item_reports" "lr" WHERE (("lr"."id" = "potential_matches"."report_id") AND ("lr"."student_id" = "auth"."uid"())))));
+CREATE POLICY "potential_matches_delete_own_reports" ON "public"."potential_matches" FOR DELETE TO "authenticated" USING ((EXISTS ( SELECT 1 FROM "public"."lost_item_reports" "lr" WHERE (("lr"."id" = "potential_matches"."report_id") AND ("lr"."student_id" = "auth"."uid"())))));
+-- Staff-scoped policies: staff/admin/owner can read/insert matches for their org's found items
+CREATE POLICY "potential_matches_select_staff_org" ON "public"."potential_matches" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1 FROM (("public"."profiles" "me" JOIN "public"."found_items" "fi" ON (("fi"."id" = "potential_matches"."lost_item_id"))) JOIN "public"."offices" "o" ON (("o"."office_id" = "fi"."office_id"))) WHERE (("me"."id" = "auth"."uid"()) AND ("me"."role" = ANY (ARRAY['staff'::"text", 'admin'::"text", 'owner'::"text"])) AND ("me"."organization_id" IS NOT NULL) AND ("o"."organization_id" = "me"."organization_id")))));
+CREATE POLICY "potential_matches_insert_staff_org" ON "public"."potential_matches" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1 FROM (("public"."profiles" "me" JOIN "public"."found_items" "fi" ON (("fi"."id" = "potential_matches"."lost_item_id"))) JOIN "public"."offices" "o" ON (("o"."office_id" = "fi"."office_id"))) WHERE (("me"."id" = "auth"."uid"()) AND ("me"."role" = ANY (ARRAY['staff'::"text", 'admin'::"text", 'owner'::"text"])) AND ("me"."organization_id" IS NOT NULL) AND ("o"."organization_id" = "me"."organization_id")))));
 
 -- =============================================================================
 -- REALTIME
@@ -546,8 +651,9 @@ GRANT USAGE ON SCHEMA "public" TO "anon";
 GRANT USAGE ON SCHEMA "public" TO "authenticated";
 GRANT USAGE ON SCHEMA "public" TO "service_role";
 
-GRANT ALL ON TABLE "public"."found_items" TO "anon", "authenticated", "service_role";
 GRANT ALL ON TABLE "public"."claims" TO "anon", "authenticated", "service_role";
+GRANT ALL ON TABLE "public"."email_alerts" TO "anon", "authenticated", "service_role";
+GRANT ALL ON TABLE "public"."found_items" TO "anon", "authenticated", "service_role";
 GRANT ALL ON TABLE "public"."lost_item_reports" TO "anon", "authenticated", "service_role";
 GRANT ALL ON TABLE "public"."notifications" TO "anon", "authenticated", "service_role";
 GRANT ALL ON TABLE "public"."offices" TO "anon", "authenticated", "service_role";
@@ -556,11 +662,13 @@ GRANT ALL ON TABLE "public"."profiles" TO "anon", "authenticated", "service_role
 GRANT ALL ON TABLE "public"."office_item_counts" TO "anon", "authenticated", "service_role";
 GRANT ALL ON TABLE "public"."potential_matches" TO "anon", "authenticated", "service_role";
 
+GRANT ALL ON FUNCTION "public"."count_reunited_items"() TO "anon", "authenticated", "service_role";
 GRANT ALL ON FUNCTION "public"."create_notification"("p_user_id" "uuid", "p_title" "text", "p_message" "text", "p_notification_type" "text", "p_related_item_id" "uuid", "p_related_item_type" "text") TO "anon", "authenticated", "service_role";
 GRANT ALL ON FUNCTION "public"."find_best_match"("p_category" "text", "p_color" "text", "p_brand" "text", "p_lost_location" "text", "p_lost_date" "date") TO "anon", "authenticated", "service_role";
 GRANT ALL ON FUNCTION "public"."get_org_lost_reports"() TO "anon", "authenticated", "service_role";
 GRANT ALL ON FUNCTION "public"."handle_new_user"() TO "anon", "authenticated", "service_role";
 GRANT ALL ON FUNCTION "public"."notify_claim_reviewed"() TO "anon", "authenticated", "service_role";
+GRANT ALL ON FUNCTION "public"."record_email_alert"("p_user_id" "uuid", "p_alert_type" "text", "p_email" "text", "p_subject" "text", "p_report_id" "uuid", "p_found_item_id" "uuid", "p_status" "text", "p_error_message" "text") TO "anon", "authenticated", "service_role";
 GRANT ALL ON FUNCTION "public"."search_found_items"("search_query" "text", "search_category" "text") TO "anon", "authenticated", "service_role";
 GRANT ALL ON FUNCTION "public"."update_updated_at_column"() TO "anon", "authenticated", "service_role";
 
