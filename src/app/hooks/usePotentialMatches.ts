@@ -51,7 +51,7 @@ function formatPotentialMatches(reportId: string, potentialMatches: any[]): Matc
 export function usePotentialMatches(
   lostItems: LostItem[],
   user: User | null
-): { matches: Map<string, Match[]>; loadingMatches: boolean } {
+): { matches: Map<string, Match[]>; loadingMatches: boolean; removeMatch: (reportId: string, foundItemId: string) => void } {
   const [matches, setMatches] = useState<Map<string, Match[]>>(new Map());
   const [loadingMatches, setLoadingMatches] = useState(false);
   // Track which reportIds we've already loaded so re-renders don't re-fetch
@@ -154,5 +154,14 @@ export function usePotentialMatches(
     };
   }, [user, lostItems]);
 
-  return { matches, loadingMatches };
+  const removeMatch = (reportId: string, foundItemId: string) => {
+    setMatches((prev) => {
+      const next = new Map(prev);
+      const current = next.get(reportId) ?? [];
+      next.set(reportId, current.filter((m) => m.foundItemId !== foundItemId));
+      return next;
+    });
+  };
+
+  return { matches, loadingMatches, removeMatch };
 }

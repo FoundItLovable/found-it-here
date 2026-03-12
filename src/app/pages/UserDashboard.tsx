@@ -77,7 +77,7 @@ export default function UserDashboard() {
   const { user, loading } = useAuthState();
   const [lostItems, setLostItems] = useState<LostItem[]>([]);
   const [selectedReport, setSelectedReport] = useState<LostItem | null>(null);
-  const { matches, loadingMatches } = usePotentialMatches(lostItems, user);
+  const { matches, loadingMatches, removeMatch } = usePotentialMatches(lostItems, user);
   const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
   const [recoveringReportId, setRecoveringReportId] = useState<string | null>(null);
   const [showSuccessCheckmark, setShowSuccessCheckmark] = useState(false);
@@ -223,6 +223,7 @@ export default function UserDashboard() {
   const handleNotMine = async (match: Match) => {
     try {
       await removeUserPotentialMatch(match.lostItemId, match.foundItemId);
+      removeMatch(match.lostItemId, match.foundItemId);
 
       toast({
         title: 'Match removed',
