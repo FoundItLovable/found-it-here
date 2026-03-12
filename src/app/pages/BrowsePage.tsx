@@ -179,6 +179,7 @@ export default function BrowsePage() {
   const navigate = useNavigate();
   const { user, loading } = useAuthState();
   const [items, setItems] = useState<FoundItem[]>([]);
+  const [loadingCatalog, setLoadingCatalog] = useState(false); // local loading for catalog fetches
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [offices, setOffices] = useState<{ office_id: string; office_name?: string | null; building_name?: string | null }[]>([]);
@@ -217,7 +218,7 @@ export default function BrowsePage() {
   }, [user, loading, navigate]);
 
   const loadInitial = useCallback(async () => {
-    setLoading(true);
+    setLoadingCatalog(true);
     try {
       const { items: fetched, hasMore: more } = await getPublicCatalogItems(filters, 0);
       setItems(fetched.map(dbRowToFoundItem));
@@ -225,7 +226,7 @@ export default function BrowsePage() {
     } catch (err) {
       console.error('Failed to load catalog:', err);
     } finally {
-      setLoading(false);
+      setLoadingCatalog(false);
     }
   }, [filters]);
 
@@ -280,7 +281,8 @@ export default function BrowsePage() {
     }
   };
 
-  if (loading && items.length === 0) {
+  // show auth-loading spinner or a catalog-loading placeholder when no items yet
+  if ((loading || loadingCatalog) && items.length === 0) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
