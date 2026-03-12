@@ -376,7 +376,7 @@ export default function UserDashboard() {
           </TabsContent>
 
           <TabsContent value="reports">
-            <div className="space-y-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+            <div className="max-w-2xl mx-auto space-y-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -666,7 +666,7 @@ export default function UserDashboard() {
       {/* Footer */}
       <footer className="border-t border-border/50 mt-16 py-8 bg-muted/30">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>© 2024 FoundIt. Helping reunite people with their belongings.</p>
+          {/* <p>© 2024 FoundIt. Helping reunite people with their belongings.</p> */}
         </div>
       </footer>
     </div>
