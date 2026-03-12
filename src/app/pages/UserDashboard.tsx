@@ -224,16 +224,6 @@ export default function UserDashboard() {
     try {
       await removeUserPotentialMatch(match.lostItemId, match.foundItemId);
 
-      setMatches((prev) => {
-        const next = new Map(prev);
-        const current = next.get(match.lostItemId) ?? [];
-        next.set(
-          match.lostItemId,
-          current.filter((m) => m.foundItemId !== match.foundItemId)
-        );
-        return next;
-      });
-
       toast({
         title: 'Match removed',
         description: 'This item will no longer appear as a potential match.',
