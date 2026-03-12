@@ -306,7 +306,7 @@ export default function BrowsePage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b border-white/20 bg-background/40 backdrop-blur-2xl shadow-lg shadow-black/5">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-2">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <Logo to={logoTo} />
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-4 md:gap-6">
@@ -323,7 +323,7 @@ export default function BrowsePage() {
               Browse Catalog
             </Link>
           </nav>
-          <div className="flex items-center gap-2 shrink-0 ml-auto">
+          <div className="flex items-center gap-2 shrink-0">
             <ThemeToggle />
             {/* Desktop: Sign Out / Sign In */}
             <Button
