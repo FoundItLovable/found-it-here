@@ -23,6 +23,7 @@ import { toast } from '@/hooks/use-toast';
 import { useTypewriterPlaceholder } from '@/hooks/useTypewriterPlaceholder';
 import { useWatchedMatches } from '@/hooks/useWatchedMatches';
 import { useLogoDestination } from '@/hooks/useLogoDestination';
+import { DirectionsDropdown } from '@/components/DirectionsDropdown';
 import { usePotentialMatches } from '@/hooks/usePotentialMatches';
 import { categoryIcons } from '@/types';
 
@@ -664,10 +665,11 @@ export default function UserDashboard() {
                   )}
                 </div>
                 <div className="flex gap-2 pt-2">
-                  <Button className="flex-1">
-                    <Navigation className="w-4 h-4 mr-2" />
-                    Get Directions
-                  </Button>
+                  <DirectionsDropdown
+                    destination={selectedMatch.foundItem.officeAddress ?? selectedMatch.foundItem.officeLocation ?? selectedMatch.foundItem.officeName}
+                    buttonClassName="flex-1"
+                    size="default"
+                  />
                   <Button variant="outline" onClick={() => setSelectedMatch(null)}>
                     Close
                   </Button>

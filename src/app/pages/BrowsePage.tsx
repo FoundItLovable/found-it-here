@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '@/components/Logo';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { ItemCard } from '@/components/ItemCard';
+import { DirectionsDropdown } from '@/components/DirectionsDropdown';
 import {
   Dialog,
   DialogContent,
@@ -168,6 +169,7 @@ function dbRowToFoundItem(row: any): FoundItem {
     officeId: office?.office_id ?? '',
     officeName: office?.office_name ?? 'Unknown Office',
     officeLocation: [office?.building_name, office?.office_address].filter(Boolean).join(' • ') || 'Unknown Location',
+    officeAddress: office?.office_address ?? undefined,
     checkedInBy: row.staff?.full_name ?? '',
     createdAt: row.created_at ?? new Date().toISOString(),
     color: row.color ?? undefined,
@@ -573,6 +575,16 @@ export default function BrowsePage() {
                       <span>Checked in by {selectedItem.checkedInBy}</span>
                     </div>
                   )}
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <DirectionsDropdown
+                    destination={selectedItem.officeAddress ?? selectedItem.officeLocation ?? selectedItem.officeName}
+                    buttonClassName="flex-1"
+                    size="default"
+                  />
+                  <Button variant="outline" onClick={() => setSelectedItem(null)}>
+                    Close
+                  </Button>
                 </div>
               </div>
             </>
