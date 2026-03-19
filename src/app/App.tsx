@@ -17,7 +17,7 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="foundit-theme">
+    <ThemeProvider attribute="class" defaultTheme="dark" enableSystem storageKey="foundit-theme">
       <TooltipProvider>
       <Toaster />
       <Sonner />
