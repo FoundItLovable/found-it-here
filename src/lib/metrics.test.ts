@@ -122,6 +122,34 @@ describe('calcAvgTimeToClaim', () => {
     ];
     expect(calcAvgTimeToClaim(claims)).toBe(2);
   });
+
+  it('rounds to one decimal place for fractional day averages', () => {
+    const created = new Date('2024-01-01T00:00:00Z').toISOString();
+    const after12h = new Date('2024-01-01T12:00:00Z').toISOString();
+    const after35h = new Date('2024-01-02T11:00:00Z').toISOString();
+
+    const claims = [
+      makeClaim({ review_status: 'approved', created_at: created, reviewed_at: after12h }),
+      makeClaim({ review_status: 'approved', created_at: created, reviewed_at: after35h }),
+    ];
+
+    expect(calcAvgTimeToClaim(claims)).toBe(1);
+  });
+
+  it('handles mixed approved and non-approved claims with fractional durations', () => {
+    const created = new Date('2024-01-01T00:00:00Z').toISOString();
+    const after6h = new Date('2024-01-01T06:00:00Z').toISOString();
+    const after42h = new Date('2024-01-02T18:00:00Z').toISOString();
+
+    const claims = [
+      makeClaim({ review_status: 'approved', created_at: created, reviewed_at: after6h }),
+      makeClaim({ review_status: 'approved', created_at: created, reviewed_at: after42h }),
+      makeClaim({ review_status: 'pending' }),
+      makeClaim({ review_status: 'rejected' }),
+    ];
+
+    expect(calcAvgTimeToClaim(claims)).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -161,6 +189,19 @@ describe('buildCategoryData', () => {
     const result = buildCategoryData(items);
     expect(result[0].category).toBe('Electronics');
     expect(result[1].category).toBe('Clothing');
+  });
+
+  it('keeps first-seen order when category counts are tied', () => {
+    const items = [
+      makeItem({ category: 'documents' }),
+      makeItem({ category: 'electronics' }),
+      makeItem({ category: 'documents' }),
+      makeItem({ category: 'electronics' }),
+    ];
+
+    const result = buildCategoryData(items);
+    expect(result[0].category).toBe('Documents');
+    expect(result[1].category).toBe('Electronics');
   });
 
   it('falls back to "other" for unknown category', () => {
@@ -204,6 +245,16 @@ describe('calcUnclaimed', () => {
     // avg = (10 + 5) / 2 = 7.5 → rounds to 8
     const result = calcUnclaimed(items, now);
     expect(result.avgAgeDays).toBe(8);
+  });
+
+  it('rounds down when average age is below .5 threshold', () => {
+    const now = new Date('2024-01-11T00:00:00Z').getTime();
+    const items = [
+      makeItem({ status: 'available', createdAt: '2024-01-01T00:00:00Z' }),
+      makeItem({ status: 'available', createdAt: '2024-01-06T23:59:59Z' }),
+    ];
+    const result = calcUnclaimed(items, now);
+    expect(result.avgAgeDays).toBe(7);
   });
 });
 

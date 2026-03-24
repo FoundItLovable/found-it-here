@@ -2,15 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // vi.hoisted ensures mockOrder is available inside the vi.mock factory,
 // which is hoisted to the top of the file by Vitest's transformer.
-const { mockOrder } = vi.hoisted(() => ({ mockOrder: vi.fn() }));
+const { mockOrder, mockEq } = vi.hoisted(() => ({
+  mockOrder: vi.fn(),
+  mockEq: vi.fn(),
+}));
 
 vi.mock('./supabase', () => ({
   supabase: {
     from: () => ({
       select: () => ({
-        eq: () => ({
+        eq: (...args: unknown[]) => {
+          mockEq(...args);
+          return {
           order: mockOrder,
-        }),
+          };
+        },
       }),
     }),
   },
@@ -50,6 +56,7 @@ const setFoundItems = (items: ReturnType<typeof makeFoundItem>[]) => {
 describe('findPotentialMatches', () => {
   beforeEach(() => {
     mockOrder.mockReset();
+    mockEq.mockReset();
   });
 
   it('returns empty array when no found items exist', async () => {
@@ -137,5 +144,89 @@ describe('findPotentialMatches', () => {
   it('throws when supabase returns an error', async () => {
     mockOrder.mockResolvedValue({ data: null, error: new Error('DB error') });
     await expect(findPotentialMatches({ category: 'electronics' })).rejects.toThrow('DB error');
+  });
+
+  it('requests only available found items', async () => {
+    setFoundItems([]);
+    await findPotentialMatches({ category: 'electronics' });
+    expect(mockEq).toHaveBeenCalledWith('status', 'available');
+  });
+
+  it('applies brand weighting and ranks exact brand higher', async () => {
+    setFoundItems([
+      makeFoundItem({ id: 'brand-match', category: 'electronics', item_name: 'tablet', brand: 'Apple' }),
+      makeFoundItem({ id: 'brand-miss', category: 'electronics', item_name: 'tablet', brand: 'Samsung' }),
+    ]);
+
+    const results = await findPotentialMatches({
+      category: 'electronics',
+      item_name: 'tablet',
+      brand: 'apple',
+    });
+
+    expect(results[0].id).toBe('brand-match');
+  });
+
+  it('applies location and description weighting to ranking', async () => {
+    setFoundItems([
+      makeFoundItem({
+        id: 'weak-context',
+        category: 'electronics',
+        item_name: 'laptop',
+        found_location: 'South Hall',
+        description: 'silver device',
+      }),
+      makeFoundItem({
+        id: 'strong-context',
+        category: 'electronics',
+        item_name: 'laptop',
+        found_location: 'Engineering Library',
+        description: 'silver laptop with campus sticker and charger',
+      }),
+    ]);
+
+    const results = await findPotentialMatches({
+      category: 'electronics',
+      item_name: 'laptop',
+      lost_location: 'Engineering Library',
+      description: 'silver laptop with charger',
+    });
+
+    expect(results[0].id).toBe('strong-context');
+  });
+
+  it('normalizes punctuation for name matching and keeps strong candidates above threshold', async () => {
+    setFoundItems([
+      makeFoundItem({ id: 'punctuated', category: 'electronics', item_name: 'AirPods, Pro' }),
+    ]);
+
+    const results = await findPotentialMatches({ category: 'electronics', item_name: 'airpods pro' });
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe('punctuated');
+  });
+
+  it('keeps borderline-above-threshold matches while excluding weaker ones', async () => {
+    setFoundItems([
+      makeFoundItem({
+        id: 'above',
+        category: 'electronics',
+        item_name: 'wireless mouse',
+        brand: 'Logitech',
+      }),
+      makeFoundItem({
+        id: 'below',
+        category: 'electronics',
+        item_name: 'keyboard',
+      }),
+    ]);
+
+    const results = await findPotentialMatches({
+      category: 'electronics',
+      item_name: 'wireless mouse',
+      brand: 'Logitech',
+    });
+
+    expect(results.some((r: any) => r.id === 'above')).toBe(true);
+    expect(results.some((r: any) => r.id === 'below')).toBe(false);
   });
 });

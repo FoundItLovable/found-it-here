@@ -1,6 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+
+vi.mock('canvas-confetti', () => ({
+  default: vi.fn(),
+}));
+
+const mockNavigate = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 vi.mock('../../lib/auth', () => ({
   getCurrentUser: vi.fn(),
@@ -20,8 +34,8 @@ vi.mock('../../lib/database', () => ({
 }));
 
 import AdminDashboard from './AdminDashboard';
-import { getCurrentUser, getCurrentUserWithProfile, isStaff } from '../../lib/auth';
-import { getOfficeFoundItems, getOfficeClaims, getAllLostReports } from '../../lib/database';
+import { getCurrentUser, getCurrentUserWithProfile, isStaff, signOut } from '../../lib/auth';
+import { getOfficeFoundItems, getOfficeClaims, getAllLostReports, updateFoundItem } from '../../lib/database';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -55,6 +69,7 @@ function renderDashboard() {
 
 describe('AdminDashboard', () => {
   beforeEach(() => {
+    mockNavigate.mockReset();
     vi.mocked(getCurrentUser).mockResolvedValue({ id: 'staff-1', email: 'staff@example.com' } as any);
     vi.mocked(getCurrentUserWithProfile).mockResolvedValue(mockUserWithProfile);
     vi.mocked(isStaff).mockResolvedValue(true);
@@ -127,5 +142,101 @@ describe('AdminDashboard', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
     });
+  });
+
+  it('redirects to login when unauthenticated', async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(null);
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/Login');
+    });
+  });
+
+  it('signs out and redirects when user is not staff', async () => {
+    vi.mocked(isStaff).mockResolvedValue(false);
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(signOut).toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith('/Login');
+    });
+  });
+
+  it('filters inventory with search input', async () => {
+    const now = new Date().toISOString();
+    vi.mocked(getOfficeFoundItems).mockResolvedValue([
+      {
+        id: 'item-1',
+        item_name: 'Blue Umbrella',
+        description: 'Found near elevator',
+        category: 'other',
+        status: 'available',
+        show_in_public_catalog: true,
+        created_at: now,
+        updated_at: now,
+        image_urls: [],
+      },
+      {
+        id: 'item-2',
+        item_name: 'Silver Laptop',
+        description: 'Found in library',
+        category: 'electronics',
+        status: 'available',
+        show_in_public_catalog: true,
+        created_at: now,
+        updated_at: now,
+        image_urls: [],
+      },
+    ] as any);
+
+    renderDashboard();
+    await waitFor(() => expect(screen.getByText('Blue Umbrella')).toBeInTheDocument());
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'laptop' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Silver Laptop')).toBeInTheDocument();
+      expect(screen.queryByText('Blue Umbrella')).not.toBeInTheDocument();
+    });
+  });
+
+  it('toggles catalog visibility from item card switch', async () => {
+    const now = new Date().toISOString();
+    vi.mocked(getOfficeFoundItems).mockResolvedValue([
+      {
+        id: 'item-1',
+        item_name: 'Blue Umbrella',
+        description: 'Found near elevator',
+        category: 'other',
+        status: 'available',
+        show_in_public_catalog: true,
+        created_at: now,
+        updated_at: now,
+        image_urls: [],
+      },
+    ] as any);
+
+    renderDashboard();
+    await waitFor(() => expect(screen.getByText('Blue Umbrella')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('switch'));
+
+    await waitFor(() => {
+      expect(updateFoundItem).toHaveBeenCalledWith('item-1', { show_in_public_catalog: false });
+    });
+  });
+
+  it('opens and closes Add Item modal from toolbar button', async () => {
+    renderDashboard();
+    await waitFor(() => expect(screen.getByRole('button', { name: /add item/i })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /add item/i }));
+    await waitFor(() => expect(screen.getByText('Add Found Item')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    await waitFor(() => expect(screen.queryByText('Add Found Item')).not.toBeInTheDocument());
   });
 });
