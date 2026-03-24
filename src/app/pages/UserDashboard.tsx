@@ -65,6 +65,19 @@ const normalizeColorList = (value: string): string =>
     )
   ).join(',');
 
+const formatDateOnly = (value: string): string => {
+  const trimmed = String(value ?? '').trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (!match) {
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? trimmed : parsed.toLocaleDateString();
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  return new Date(year, month - 1, day).toLocaleDateString();
+};
+
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { UserDashboardSkeleton } from '@/components/skeletons/UserDashboardSkeleton';
@@ -108,6 +121,7 @@ export default function UserDashboard() {
     dateLost: string;
     locationLost: string;
     color?: string;
+    brand?: string;
   }) => {
     if (!user) {
       toast({
@@ -126,6 +140,7 @@ export default function UserDashboard() {
         description: data.description,
         category: data.category,
         color: cleanedColor || undefined,
+        brand: data.brand?.trim() || undefined,
         lost_date: data.dateLost,
         lost_location: data.locationLost,
         status: 'active',
@@ -470,7 +485,7 @@ export default function UserDashboard() {
                               <div className="flex items-center gap-4 text-xs text-muted-foreground">
                                 <span className="flex items-center gap-1">
                                   <Clock className="w-3 h-3" />
-                                  {new Date(item.dateLost).toLocaleDateString()}
+                                  {formatDateOnly(item.dateLost)}
                                 </span>
                                 <span className="flex items-center gap-1">
                                   <MapPin className="w-3 h-3" />

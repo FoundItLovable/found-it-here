@@ -10,6 +10,8 @@ export interface OfficeRow {
   building_name?: string | null;
   office_address?: string | null;
   organization_id?: string | null;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 export type FoundItemStatus = "available" | "claimed" | string;
@@ -30,6 +32,7 @@ export interface FoundItemRow {
   status?: FoundItemStatus;
   show_in_public_catalog?: boolean;
   created_at?: string;
+  updated_at?: string;
   [k: string]: unknown;
 }
 
@@ -107,6 +110,42 @@ export const getOffice = async (officeId: string): Promise<OfficeRow> => {
     .single();
   if (error) throw error;
   return data as OfficeRow;
+};
+
+// --------------------------------------------
+// REUNITED (landing metrics)
+// --------------------------------------------
+
+export type RecentReunitedActivity = {
+  id: string;
+  item_name: string | null;
+  updated_at: string | null;
+  office: {
+    office_name: string | null;
+    building_name: string | null;
+  } | null;
+};
+
+export const getRecentReunitedActivity = async (limit = 12): Promise<RecentReunitedActivity[]> => {
+  const { data, error } = await supabase
+    .from("found_items")
+    .select(
+      `
+      id,
+      item_name,
+      updated_at,
+      office:offices!office_id(
+        office_name,
+        building_name
+      )
+    `
+    )
+    .eq("status", "returned")
+    .order("updated_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return (data ?? []) as RecentReunitedActivity[];
 };
 
 // --------------------------------------------
@@ -222,6 +261,29 @@ export const getPublicCatalogItems = async (
   const hasMore = items.length === PAGE_SIZE;
 
   return { items, hasMore };
+};
+
+// Lightweight public image feed for the landing page slider.
+// Pulls only items that are allowed in the public catalog.
+export const getPublicCatalogImageUrls = async (limit = 24): Promise<string[]> => {
+  const { data, error } = await supabase
+    .from("found_items")
+    .select("image_urls")
+    .eq("show_in_public_catalog", true)
+    .eq("status", "available")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+
+  const rows = (data ?? []) as Array<{ image_urls?: unknown }>;
+  const urls = rows
+    .flatMap((r) => (Array.isArray(r.image_urls) ? r.image_urls : []))
+    .map((u) => String(u ?? "").trim())
+    .filter(Boolean);
+
+  // de-dupe while preserving order
+  return Array.from(new Set(urls));
 };
 
 export const getFoundItem = async (itemId: string): Promise<FoundItemRow> => {
