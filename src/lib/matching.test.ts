@@ -24,7 +24,7 @@ import { findPotentialMatches } from './database';
 
 // Weights: category=0.4, name=0.3, color=0.15, brand=0.15, location=0.1, desc=0.1
 // totalWeights always = 1.2 regardless of which fields are present.
-// Threshold to appear in results: score / 1.2 >= 0.45  →  score >= 0.54
+// Threshold to appear in results: score / 1.2 >= 0.65  -> score >= 0.78
 
 const makeFoundItem = (overrides: Record<string, unknown> = {}) => ({
   id: 'found-1',
@@ -58,60 +58,60 @@ describe('findPotentialMatches', () => {
     expect(results).toHaveLength(0);
   });
 
-  it('filters out items below the 0.45 score threshold', async () => {
+  it('filters out items below the 0.65 score threshold', async () => {
     // Category-only match: 0.4 / 1.2 = 0.33 — below threshold
     setFoundItems([makeFoundItem({ category: 'electronics' })]);
     const results = await findPotentialMatches({ category: 'electronics' });
     expect(results).toHaveLength(0);
   });
 
-  it('includes items that meet the threshold (category + exact name match)', async () => {
-    // category(0.4) + name exact(0.3) = 0.7 / 1.2 = 0.58 — above threshold
-    setFoundItems([makeFoundItem({ category: 'electronics', item_name: 'MacBook' })]);
-    const results = await findPotentialMatches({ category: 'electronics', item_name: 'MacBook' });
+  it('includes items that meet the threshold', async () => {
+    // category(0.4) + name(0.3) + brand(0.15) + color overlap(0.15) = 1.0 / 1.2 = 0.833
+    setFoundItems([makeFoundItem({ category: 'electronics', item_name: 'MacBook', brand: 'Apple', color: 'silver' })]);
+    const results = await findPotentialMatches({ category: 'electronics', item_name: 'MacBook', brand: 'Apple', color: 'silver' });
     expect(results).toHaveLength(1);
   });
 
   it('returns results sorted by score descending', async () => {
     setFoundItems([
-      // Weaker: category + partial name (substring) → 0.4 + 0.8*0.3 = 0.64 / 1.2 = 0.53
-      makeFoundItem({ id: 'partial', category: 'electronics', item_name: 'MacBook Pro 14' }),
-      // Stronger: category + exact name → 0.4 + 0.3 = 0.7 / 1.2 = 0.58
-      makeFoundItem({ id: 'exact', category: 'electronics', item_name: 'MacBook' }),
+      // Weaker but above threshold: category + name + brand = 0.85 / 1.2 = 0.708
+      makeFoundItem({ id: 'weaker', category: 'electronics', item_name: 'MacBook', brand: 'Apple', color: 'black' }),
+      // Stronger: adds color overlap bonus = 1.0 / 1.2 = 0.833
+      makeFoundItem({ id: 'stronger', category: 'electronics', item_name: 'MacBook', brand: 'Apple', color: 'silver' }),
     ]);
-    const results = await findPotentialMatches({ category: 'electronics', item_name: 'MacBook' });
-    // exact match scores higher than partial match
-    expect(results[0].id).toBe('exact');
-    expect(results[1].id).toBe('partial');
+    const results = await findPotentialMatches({ category: 'electronics', item_name: 'MacBook', brand: 'Apple', color: 'silver' });
+    expect(results[0].id).toBe('stronger');
+    expect(results[1].id).toBe('weaker');
   });
 
   it('returns at most 5 results', async () => {
     // 10 identical high-scoring items
     setFoundItems(
       Array.from({ length: 10 }, (_, i) =>
-        makeFoundItem({ id: String(i), category: 'electronics', item_name: 'MacBook' })
+        makeFoundItem({ id: String(i), category: 'electronics', item_name: 'MacBook', brand: 'Apple', color: 'silver' })
       )
     );
-    const results = await findPotentialMatches({ category: 'electronics', item_name: 'MacBook' });
+    const results = await findPotentialMatches({ category: 'electronics', item_name: 'MacBook', brand: 'Apple', color: 'silver' });
     expect(results.length).toBeLessThanOrEqual(5);
   });
 
   it('matches category and item name case-insensitively', async () => {
-    setFoundItems([makeFoundItem({ category: 'Electronics', item_name: 'MACBOOK' })]);
-    const results = await findPotentialMatches({ category: 'electronics', item_name: 'macbook' });
+    setFoundItems([makeFoundItem({ category: 'Electronics', item_name: 'MACBOOK', brand: 'APPLE', color: 'SILVER' })]);
+    const results = await findPotentialMatches({ category: 'electronics', item_name: 'macbook', brand: 'apple', color: 'silver' });
     expect(results).toHaveLength(1);
   });
 
   it('scores color overlap correctly — shared color ranks higher', async () => {
-    // Both items: category + exact name → baseline 0.58
-    // Item with shared color also adds color score → higher rank
+    // Both items: category + exact name + exact brand -> baseline 0.708
+    // Item with shared color also adds color score -> higher rank
     setFoundItems([
-      makeFoundItem({ id: 'no-color-match', category: 'electronics', item_name: 'laptop', color: 'red' }),
-      makeFoundItem({ id: 'color-match',    category: 'electronics', item_name: 'laptop', color: 'silver, black' }),
+      makeFoundItem({ id: 'no-color-match', category: 'electronics', item_name: 'laptop', brand: 'dell', color: 'red' }),
+      makeFoundItem({ id: 'color-match',    category: 'electronics', item_name: 'laptop', brand: 'dell', color: 'silver, black' }),
     ]);
     const results = await findPotentialMatches({
       category: 'electronics',
       item_name: 'laptop',
+      brand: 'dell',
       color: 'silver',
     });
     const colorMatchIdx    = results.findIndex((r: any) => r.id === 'color-match');
@@ -121,16 +121,17 @@ describe('findPotentialMatches', () => {
 
   it('handles comma and slash separated color values', async () => {
     // lost color "blue" should match found color "red/blue"
-    setFoundItems([makeFoundItem({ category: 'electronics', item_name: 'laptop', color: 'red/blue' })]);
+    setFoundItems([makeFoundItem({ category: 'electronics', item_name: 'laptop', brand: 'dell', color: 'red/blue' })]);
     const results = await findPotentialMatches({
       category: 'electronics',
       item_name: 'laptop',
+      brand: 'dell',
       color: 'blue',
     });
     expect(results).toHaveLength(1);
     expect(results[0].matchScore).toBeGreaterThan(
       // score without color bonus
-      (0.4 + 0.3) / 1.2
+      (0.4 + 0.3 + 0.15) / 1.2
     );
   });
 
