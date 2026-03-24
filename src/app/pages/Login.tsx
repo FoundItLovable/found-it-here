@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -33,6 +33,22 @@ export default function Login() {
   const logoTo = useLogoDestination();
   const from = (location.state as { from?: string })?.from ?? "/dashboard";
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    void fetch("/api/wakeup", { method: "GET", cache: "no-store" })
+      .then(async (resp) => {
+        let body: unknown = null;
+        try {
+          body = await resp.json();
+        } catch {
+          body = null;
+        }
+        console.log("Wakeup ping result:", { ok: resp.ok, status: resp.status, body });
+      })
+      .catch((err) => {
+        console.warn("Wakeup ping failed:", err);
+      });
+  }, []);
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
