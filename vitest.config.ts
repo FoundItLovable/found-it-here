@@ -9,10 +9,7 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/app/test/setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
-    poolOptions: {
-      threads: { execArgv: ["--localstorage-file=/dev/null"] },
-      forks: { execArgv: ["--localstorage-file=/dev/null"] },
-    },
+
   },
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src/app/") },
