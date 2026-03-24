@@ -26,6 +26,7 @@ function dbFoundItemToFoundItem(row: any): FoundItem {
     officeId: office?.office_id ?? '',
     officeName: office?.office_name ?? 'Unknown Office',
     officeLocation: [office?.building_name, office?.office_address].filter(Boolean).join(' • ') || 'Unknown Location',
+    officeAddress: office?.office_address ?? undefined,
     checkedInBy: row.staff?.full_name ?? '',
     createdAt: row.created_at ?? new Date().toISOString(),
   };

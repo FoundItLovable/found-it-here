@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { MapPin, Calendar, Navigation, Bookmark } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { DirectionsDropdown } from '@/components/DirectionsDropdown';
 
 interface MatchCardProps {
   match: Match;
@@ -106,10 +107,11 @@ export function MatchCard({ match, isWatched, onToggleWatch, onViewDetails, onNo
             </div>
 
             <div className="flex items-center gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
-              <Button size="sm" className="flex-1">
-                <Navigation className="w-3.5 h-3.5" />
-                Get Directions
-              </Button>
+              <DirectionsDropdown
+                destination={foundItem.officeAddress ?? foundItem.officeLocation ?? foundItem.officeName}
+                buttonClassName="flex-1"
+                size="sm"
+              />
               <Button
                 variant="ghost"
                 size="sm"

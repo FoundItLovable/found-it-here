@@ -1283,6 +1283,11 @@ app.get("/api/stats/reunited", async (_req, res) => {
   }
 });
 
+// Basic wake-up endpoint for free-tier cold starts.
+app.get("/api/wakeup", (_req, res) => {
+  res.json({ ok: true, message: "awake", timestamp: new Date().toISOString() });
+});
+
 // Friendly root route so visiting http://localhost:5050 shows a helpful message
 app.get("/", (_req, res) => {
   res.send(
