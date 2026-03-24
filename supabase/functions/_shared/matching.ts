@@ -1,4 +1,4 @@
-export const MATCH_THRESHOLD = 0.45;
+export const MATCH_THRESHOLD = 0.65;
 export const MATCH_LIMIT = 5;
 
 const parseCommaSeparatedValues = (value: unknown): string[] => {

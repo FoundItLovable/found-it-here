@@ -119,7 +119,7 @@ function isExpired(expiresAt: number): boolean {
   return now() > expiresAt;
 }
 
-const MATCH_THRESHOLD = 0.6;
+const MATCH_THRESHOLD = 0.65;
 const MATCH_LIMIT = 5;
 
 const parseCommaSeparatedValues = (value: unknown): string[] => {

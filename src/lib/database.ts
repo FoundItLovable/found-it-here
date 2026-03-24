@@ -1046,7 +1046,7 @@ export const findPotentialMatches = async (lostItemData: Partial<LostItemReportR
   });
 
   return matches
-    .filter((item: any) => item.matchScore >= 0.45)
+    .filter((item: any) => item.matchScore >= 0.65)
     .sort((a: any, b: any) => b.matchScore - a.matchScore)
     .slice(0, 5);
 };
