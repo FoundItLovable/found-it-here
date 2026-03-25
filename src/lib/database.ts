@@ -281,14 +281,8 @@ export const createFoundItem = async (itemData: CreateFoundItemInput): Promise<F
     console.error("createFoundItem: potential match persistence failed", matchError);
   }
 
-  // Trigger email notifications for matching lost items asynchronously
-  try {
-    await requestMatchFoundNotifications(created.id, String(created.item_name ?? ""));
-  } catch (emailError) {
-    console.error("createFoundItem: match email notifications failed", emailError);
-    // Don't throw - email is secondary to the core feature
-  }
-
+  // Potential match and email notifications are now handled by /api/admin/potential-matches/update
+  // when a new found item is added by an admin.
   return created;
 };
 
