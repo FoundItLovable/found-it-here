@@ -119,7 +119,7 @@ function isExpired(expiresAt: number): boolean {
   return now() > expiresAt;
 }
 
-const MATCH_THRESHOLD = 0.45;
+const MATCH_THRESHOLD = 0.65;
 const MATCH_LIMIT = 5;
 
 const parseCommaSeparatedValues = (value: unknown): string[] => {
@@ -1341,6 +1341,11 @@ app.get("/api/stats/reunited", async (_req, res) => {
   }
 });
 
+// Basic wake-up endpoint for free-tier cold starts.
+app.get("/api/wakeup", (_req, res) => {
+  res.json({ ok: true, message: "awake", timestamp: new Date().toISOString() });
+});
+
 // Friendly root route so visiting http://localhost:5050 shows a helpful message
 app.get("/", (_req, res) => {
   res.send(
@@ -1653,14 +1658,20 @@ app.use((_req, res) => {
   res.status(404).send(`No route for ${_req.method} ${_req.url}`);
 });
 
-server = app.listen(5050, () => {
-  console.log("Server running on http://localhost:5050");
-  try {
-    console.log("server.address():", server.address());
-    console.log("server.listening:", server.listening);
-  } catch (e) {
-    console.error("Error accessing server properties:", e);
-  }
+// server = app.listen(5050, () => {
+//   console.log("Server running on http://localhost:5050");
+//   try {
+//     console.log("server.address():", server.address());
+//     console.log("server.listening:", server.listening);
+//   } catch (e) {
+//     console.error("Error accessing server properties:", e);
+//   }
+// });
+
+const PORT = process.env.PORT || 5050;
+
+server = app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
 
 server.on("close", () => {

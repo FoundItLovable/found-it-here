@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '@/components/Logo';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { ItemCard } from '@/components/ItemCard';
+import { DirectionsDropdown } from '@/components/DirectionsDropdown';
 import {
   Dialog,
   DialogContent,
@@ -33,7 +34,8 @@ import {
   DrawerTrigger,
 } from '@/components/ui/drawer';
 import { Search, LogOut, MapPin, Calendar, User, Loader2, Menu, SlidersHorizontal } from 'lucide-react';
-import { getCurrentUser, signOut } from '../../lib/auth';
+import { signOut } from '../../lib/auth';
+import { useAuthState } from '@/hooks/useAuthState';
 import {
   getPublicCatalogItems,
   getAllOffices,
@@ -167,6 +169,7 @@ function dbRowToFoundItem(row: any): FoundItem {
     officeId: office?.office_id ?? '',
     officeName: office?.office_name ?? 'Unknown Office',
     officeLocation: [office?.building_name, office?.office_address].filter(Boolean).join(' • ') || 'Unknown Location',
+    officeAddress: office?.office_address ?? undefined,
     checkedInBy: row.staff?.full_name ?? '',
     createdAt: row.created_at ?? new Date().toISOString(),
     color: row.color ?? undefined,
@@ -176,9 +179,9 @@ function dbRowToFoundItem(row: any): FoundItem {
 
 export default function BrowsePage() {
   const navigate = useNavigate();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loading } = useAuthState();
   const [items, setItems] = useState<FoundItem[]>([]);
+  const [loadingCatalog, setLoadingCatalog] = useState(false); // local loading for catalog fetches
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [offices, setOffices] = useState<{ office_id: string; office_name?: string | null; building_name?: string | null }[]>([]);
@@ -197,11 +200,10 @@ export default function BrowsePage() {
   ]);
 
   useEffect(() => {
+    if (loading) return;
     async function load() {
       try {
-        const currentUser = await getCurrentUser();
-        setUser(currentUser);
-        if (!currentUser) {
+        if (!user) {
           navigate('/login', { replace: true, state: { from: '/browse' } });
           return;
         }
@@ -211,14 +213,14 @@ export default function BrowsePage() {
         console.error('Failed to load:', err);
         navigate('/login', { replace: true, state: { from: '/browse' } });
       } finally {
-        setLoading(false);
+        // loading is managed by useAuthState
       }
     }
     load();
-  }, [navigate]);
+  }, [user, loading, navigate]);
 
   const loadInitial = useCallback(async () => {
-    setLoading(true);
+    setLoadingCatalog(true);
     try {
       const { items: fetched, hasMore: more } = await getPublicCatalogItems(filters, 0);
       setItems(fetched.map(dbRowToFoundItem));
@@ -226,7 +228,7 @@ export default function BrowsePage() {
     } catch (err) {
       console.error('Failed to load catalog:', err);
     } finally {
-      setLoading(false);
+      setLoadingCatalog(false);
     }
   }, [filters]);
 
@@ -275,14 +277,14 @@ export default function BrowsePage() {
   const handleSignOut = async () => {
     try {
       await signOut();
-      setUser(null);
       navigate('/');
     } catch (err) {
       console.error('Sign out failed:', err);
     }
   };
 
-  if (loading && items.length === 0) {
+  // show auth-loading spinner or a catalog-loading placeholder when no items yet
+  if ((loading || loadingCatalog) && items.length === 0) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -306,7 +308,7 @@ export default function BrowsePage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b border-white/20 bg-background/40 backdrop-blur-2xl shadow-lg shadow-black/5">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-2">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <Logo to={logoTo} />
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-4 md:gap-6">
@@ -323,7 +325,7 @@ export default function BrowsePage() {
               Browse Catalog
             </Link>
           </nav>
-          <div className="flex items-center gap-2 shrink-0 ml-auto">
+          <div className="flex items-center gap-2 shrink-0">
             <ThemeToggle />
             {/* Desktop: Sign Out / Sign In */}
             <Button
@@ -573,6 +575,16 @@ export default function BrowsePage() {
                       <span>Checked in by {selectedItem.checkedInBy}</span>
                     </div>
                   )}
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <DirectionsDropdown
+                    destination={selectedItem.officeAddress ?? selectedItem.officeLocation ?? selectedItem.officeName}
+                    buttonClassName="flex-1"
+                    size="default"
+                  />
+                  <Button variant="outline" onClick={() => setSelectedItem(null)}>
+                    Close
+                  </Button>
                 </div>
               </div>
             </>

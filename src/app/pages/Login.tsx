@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -33,6 +33,36 @@ export default function Login() {
   const logoTo = useLogoDestination();
   const from = (location.state as { from?: string })?.from ?? "/dashboard";
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const ping = async (url: string) => {
+      const resp = await fetch(url, { method: "GET", cache: "no-store" });
+      let body: unknown = null;
+      try {
+        body = await resp.json();
+      } catch {
+        body = null;
+      }
+      console.log("Wakeup ping result:", {
+        url,
+        ok: resp.ok,
+        status: resp.status,
+        reachedServer: true,
+        body,
+      });
+      return resp;
+    };
+
+    void ping("/api/wakeup")
+      .then(async (resp) => {
+        if (resp.ok) return;
+        console.warn("Wakeup endpoint returned non-2xx, trying fallback endpoint...");
+        await ping("/api/stats/reunited");
+      })
+      .catch((err) => {
+        console.warn("Wakeup ping failed before reaching server:", err);
+      });
+  }, []);
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),

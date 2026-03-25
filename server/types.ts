@@ -24,7 +24,6 @@ export interface FoundItem {
   officeId: string;
   officeName: string;
   officeLocation: string;
-  officeAddress?: string;
   checkedInBy: string;
   createdAt: string;
   updatedAt?: string;

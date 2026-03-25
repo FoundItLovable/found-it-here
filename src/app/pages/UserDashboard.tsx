@@ -23,18 +23,21 @@ import { toast } from '@/hooks/use-toast';
 import { useTypewriterPlaceholder } from '@/hooks/useTypewriterPlaceholder';
 import { useWatchedMatches } from '@/hooks/useWatchedMatches';
 import { useLogoDestination } from '@/hooks/useLogoDestination';
+import { DirectionsDropdown } from '@/components/DirectionsDropdown';
+import { usePotentialMatches } from '@/hooks/usePotentialMatches';
 import { categoryIcons } from '@/types';
 
-import { getCurrentUser, signOut } from '../../lib/auth';
+import { signOut } from '../../lib/auth';
+import { useAuthState } from '@/hooks/useAuthState';
 import {
   getUserLostReports,
   createLostItemReport,
-  deleteLostItemReport,
   updateLostItemReport,
-  getUserReportPotentialMatches,
+  deleteLostItemReport,
   removeUserPotentialMatch,
   LostItemReportRow,
 } from '../../lib/database';
+import { supabase } from '../../lib/supabase';
 
 // Convert database row to frontend LostItem type
 function rowToLostItem(row: LostItemReportRow): LostItem {
@@ -63,31 +66,19 @@ const normalizeColorList = (value: string): string =>
     )
   ).join(',');
 
-// Convert database found item to frontend FoundItem type
-function dbFoundItemToFoundItem(row: any): FoundItem {
-  const office = row.office ?? row.staff?.office;
-  const normalizedImageUrl = Array.isArray(row?.image_urls)
-    ? row.image_urls[0]
-    : typeof row?.image_urls === 'string'
-      ? row.image_urls
-      : row?.image_url;
-  const normalizedStatus = String(row?.status ?? '').toLowerCase();
+const formatDateOnly = (value: string): string => {
+  const trimmed = String(value ?? '').trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (!match) {
+    const parsed = new Date(trimmed);
+    return Number.isNaN(parsed.getTime()) ? trimmed : parsed.toLocaleDateString();
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  return new Date(year, month - 1, day).toLocaleDateString();
+};
 
-  return {
-    id: row.id,
-    name: row.item_name ?? 'Unnamed item',
-    description: row.description ?? '',
-    category: (row.category as ItemCategory) ?? 'other',
-    dateFound: row.found_date ? String(row.found_date).slice(0, 10) : row.created_at?.slice(0, 10) ?? '',
-    imageUrl: normalizedImageUrl ?? undefined,
-    status: normalizedStatus === 'returned' ? 'returned' : normalizedStatus === 'claimed' ? 'claimed' : 'available',
-    officeId: office?.office_id ?? '',
-    officeName: office?.office_name ?? 'Unknown Office',
-    officeLocation: [office?.building_name, office?.office_address].filter(Boolean).join(' • ') || 'Unknown Location',
-    checkedInBy: row.staff?.full_name ?? '',
-    createdAt: row.created_at ?? new Date().toISOString(),
-  };
-}
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { UserDashboardSkeleton } from '@/components/skeletons/UserDashboardSkeleton';
@@ -97,31 +88,11 @@ export default function UserDashboard() {
   const navigate = useNavigate();
   const logoTo = useLogoDestination();
   const [activeTab, setActiveTab] = useState<'report' | 'reports'>('report');
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loading } = useAuthState();
   const [lostItems, setLostItems] = useState<LostItem[]>([]);
   const [selectedReport, setSelectedReport] = useState<LostItem | null>(null);
-  const [matches, setMatches] = useState<Map<string, Match[]>>(new Map());
-  const [loadingMatches, setLoadingMatches] = useState(false);
+  const { matches, loadingMatches, removeMatch } = usePotentialMatches(lostItems, user);
   const [deletingReportId, setDeletingReportId] = useState<string | null>(null);
-
-  const formatPotentialMatches = (reportId: string, potentialMatches: any[]): Match[] => {
-    const availableMatches = potentialMatches.filter(
-      (row: any) => String(row?.foundItem?.status ?? '').toLowerCase() === 'available'
-    );
-
-    return availableMatches.map((row: any) => ({
-      id: String(row.matchId ?? `match-${reportId}-${row.foundItemId}`),
-      lostItemId: String(row.reportId ?? reportId),
-      foundItemId: String(row.foundItemId),
-      confidence: Number.isFinite(Number(row.confidence))
-        ? Number(row.confidence)
-        : Number.isFinite(Number(row.score))
-          ? Math.round(Number(row.score) * 100)
-          : 50,
-      foundItem: dbFoundItemToFoundItem(row.foundItem),
-    }));
-  };
   const [recoveringReportId, setRecoveringReportId] = useState<string | null>(null);
   const [showSuccessCheckmark, setShowSuccessCheckmark] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
@@ -136,74 +107,13 @@ export default function UserDashboard() {
   ]);
   const { isWatched, toggleWatch } = useWatchedMatches(user?.id ?? null);
 
-  // Load user and their reports on mount
+  // Load reports whenever auth state resolves
   useEffect(() => {
-    async function load() {
-      try {
-        const currentUser = await getCurrentUser();
-        setUser(currentUser);
-
-        if (currentUser) {
-          const reports = await getUserLostReports();
-          setLostItems(reports.map(rowToLostItem));
-        }
-      } catch (err) {
-        console.error('Failed to load data:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, []);
-
-  // Preload matches for all reports once reports are loaded (no click-triggered fetches).
-  useEffect(() => {
-    if (!user || lostItems.length === 0) return;
-
-    const reportIdsToLoad = lostItems.map((item) => item.id).filter((id) => !matches.has(id));
-    if (reportIdsToLoad.length === 0) return;
-
-    let cancelled = false;
-
-    async function preloadMatches() {
-      setLoadingMatches(true);
-      try {
-        const loaded = await Promise.all(
-          reportIdsToLoad.map(async (reportId) => {
-            const potentialMatches = await getUserReportPotentialMatches(reportId);
-            return [reportId, formatPotentialMatches(reportId, potentialMatches)] as const;
-          })
-        );
-
-        if (cancelled) return;
-
-        setMatches((prev) => {
-          const next = new Map(prev);
-          for (const [reportId, reportMatches] of loaded) {
-            next.set(reportId, reportMatches);
-          }
-          return next;
-        });
-      } catch (err) {
-        if (cancelled) return;
-        const message =
-        err instanceof Error ? err.message : String(err);
-        console.error('[UserDashboard.preloadMatches] failed', err);
-        toast({
-          title: 'Error',
-          description: `Failed to load potential matches: ${message}`,
-          variant: 'destructive',
-        });
-      } finally {
-        if (!cancelled) setLoadingMatches(false);
-      }
-    }
-
-    void preloadMatches();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, lostItems, matches]);
+    if (loading || !user) return;
+    getUserLostReports()
+      .then((reports) => setLostItems(reports.map(rowToLostItem)))
+      .catch((err) => console.error('Failed to load reports:', err));
+  }, [user, loading]);
 
   const handleReportItem = async (data: {
     name: string;
@@ -239,6 +149,8 @@ export default function UserDashboard() {
 
       const newItem = rowToLostItem(created);
       setLostItems(prev => [newItem, ...prev]);
+
+      // Match computation triggered inside createLostItemReport
     } catch (err: any) {
       console.error('Failed to create report:', err);
       toast({
@@ -253,9 +165,7 @@ export default function UserDashboard() {
   const handleSignOut = async () => {
     try {
       await signOut();
-      setUser(null);
       setLostItems([]);
-      setMatches(new Map());
       toast({ title: 'Signed out', description: 'You have been signed out.' });
       navigate('/');
     } catch (err) {
@@ -274,6 +184,10 @@ export default function UserDashboard() {
         prev.map((r) => (r.id === reportId ? { ...r, status: 'recovered' as const } : r))
       );
       setSelectedReport((prev) => (prev?.id === reportId ? null : prev));
+
+      // Clear potential matches — report is no longer active
+      void supabase.from("potential_matches").delete().eq("report_id", reportId);
+
       toast({
         title: 'Item recovered!',
         description: "We're glad you got your item back.",
@@ -305,11 +219,6 @@ export default function UserDashboard() {
 
       setLostItems(prev => prev.filter(item => item.id !== reportId));
       setSelectedReport(prev => (prev?.id === reportId ? null : prev));
-      setMatches(prev => {
-        const next = new Map(prev);
-        next.delete(reportId);
-        return next;
-      });
 
       toast({
         title: 'Report deleted',
@@ -330,16 +239,7 @@ export default function UserDashboard() {
   const handleNotMine = async (match: Match) => {
     try {
       await removeUserPotentialMatch(match.lostItemId, match.foundItemId);
-
-      setMatches((prev) => {
-        const next = new Map(prev);
-        const current = next.get(match.lostItemId) ?? [];
-        next.set(
-          match.lostItemId,
-          current.filter((m) => m.foundItemId !== match.foundItemId)
-        );
-        return next;
-      });
+      removeMatch(match.lostItemId, match.foundItemId);
 
       toast({
         title: 'Match removed',
@@ -492,7 +392,7 @@ export default function UserDashboard() {
           </TabsContent>
 
           <TabsContent value="reports">
-            <div className="space-y-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+            <div className="max-w-2xl mx-auto space-y-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -586,7 +486,7 @@ export default function UserDashboard() {
                               <div className="flex items-center gap-4 text-xs text-muted-foreground">
                                 <span className="flex items-center gap-1">
                                   <Clock className="w-3 h-3" />
-                                  {new Date(item.dateLost).toLocaleDateString()}
+                                  {formatDateOnly(item.dateLost)}
                                 </span>
                                 <span className="flex items-center gap-1">
                                   <MapPin className="w-3 h-3" />
@@ -765,10 +665,11 @@ export default function UserDashboard() {
                   )}
                 </div>
                 <div className="flex gap-2 pt-2">
-                  <Button className="flex-1">
-                    <Navigation className="w-4 h-4 mr-2" />
-                    Get Directions
-                  </Button>
+                  <DirectionsDropdown
+                    destination={selectedMatch.foundItem.officeAddress ?? selectedMatch.foundItem.officeLocation ?? selectedMatch.foundItem.officeName}
+                    buttonClassName="flex-1"
+                    size="default"
+                  />
                   <Button variant="outline" onClick={() => setSelectedMatch(null)}>
                     Close
                   </Button>
@@ -782,7 +683,7 @@ export default function UserDashboard() {
       {/* Footer */}
       <footer className="border-t border-border/50 mt-16 py-8 bg-muted/30">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>© 2024 FoundIt. Helping reunite people with their belongings.</p>
+          {/* <p>© 2024 FoundIt. Helping reunite people with their belongings.</p> */}
         </div>
       </footer>
     </div>

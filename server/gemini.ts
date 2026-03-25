@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { categoryLabels } from "../src/app/types";
+import { categoryLabels } from "./types.ts";
 
 export type AnalyzeResult = {
   name: string;

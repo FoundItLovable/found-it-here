@@ -4,18 +4,24 @@ import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../lib/auth', () => ({
   getCurrentUser: vi.fn(),
+  getCurrentUserWithProfile: vi.fn(),
+  subscribeToAuthChanges: vi.fn().mockReturnValue({ unsubscribe: vi.fn() }),
   signOut: vi.fn(),
 }));
 
 vi.mock('../../lib/database', () => ({
   getUserLostReports: vi.fn(),
   createLostItemReport: vi.fn(),
-  deleteLostItemReport: vi.fn(),
-  findPotentialMatches: vi.fn(),
+  updateLostItemReport: vi.fn(),
+  deleteLostItemReport: vi.fn().mockResolvedValue(undefined),
+  getUserReportPotentialMatches: vi.fn().mockResolvedValue([]),
+  requestUserPotentialMatchUpdate: vi.fn().mockResolvedValue(undefined),
+  subscribeToMatchChanges: vi.fn().mockReturnValue(() => {}),
+  removeUserPotentialMatch: vi.fn().mockResolvedValue(undefined),
 }));
 
 import UserDashboard from './UserDashboard';
-import { getCurrentUser } from '../../lib/auth';
+import { getCurrentUser, getCurrentUserWithProfile } from '../../lib/auth';
 import { getUserLostReports } from '../../lib/database';
 
 // ---------------------------------------------------------------------------
@@ -44,6 +50,7 @@ describe('UserDashboard', () => {
   describe('guest (not signed in)', () => {
     beforeEach(() => {
       vi.mocked(getCurrentUser).mockResolvedValue(null);
+      vi.mocked(getCurrentUserWithProfile).mockResolvedValue(null);
     });
 
     it('shows Sign In link in header', async () => {
@@ -84,6 +91,7 @@ describe('UserDashboard', () => {
   describe('logged in', () => {
     beforeEach(() => {
       vi.mocked(getCurrentUser).mockResolvedValue(mockUser);
+      vi.mocked(getCurrentUserWithProfile).mockResolvedValue({ ...mockUser, profile: { role: 'user' } });
     });
 
     it('shows Sign Out button in header', async () => {

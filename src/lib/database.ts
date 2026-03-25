@@ -10,6 +10,8 @@ export interface OfficeRow {
   building_name?: string | null;
   office_address?: string | null;
   organization_id?: string | null;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 export type FoundItemStatus = "available" | "claimed" | string;
@@ -30,6 +32,7 @@ export interface FoundItemRow {
   status?: FoundItemStatus;
   show_in_public_catalog?: boolean;
   created_at?: string;
+  updated_at?: string;
   [k: string]: unknown;
 }
 
@@ -107,6 +110,42 @@ export const getOffice = async (officeId: string): Promise<OfficeRow> => {
     .single();
   if (error) throw error;
   return data as OfficeRow;
+};
+
+// --------------------------------------------
+// REUNITED (landing metrics)
+// --------------------------------------------
+
+export type RecentReunitedActivity = {
+  id: string;
+  item_name: string | null;
+  updated_at: string | null;
+  office: {
+    office_name: string | null;
+    building_name: string | null;
+  } | null;
+};
+
+export const getRecentReunitedActivity = async (limit = 12): Promise<RecentReunitedActivity[]> => {
+  const { data, error } = await supabase
+    .from("found_items")
+    .select(
+      `
+      id,
+      item_name,
+      updated_at,
+      office:offices!office_id(
+        office_name,
+        building_name
+      )
+    `
+    )
+    .eq("status", "returned")
+    .order("updated_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return (data ?? []) as RecentReunitedActivity[];
 };
 
 // --------------------------------------------
@@ -224,6 +263,29 @@ export const getPublicCatalogItems = async (
   return { items, hasMore };
 };
 
+// Lightweight public image feed for the landing page slider.
+// Pulls only items that are allowed in the public catalog.
+export const getPublicCatalogImageUrls = async (limit = 24): Promise<string[]> => {
+  const { data, error } = await supabase
+    .from("found_items")
+    .select("image_urls")
+    .eq("show_in_public_catalog", true)
+    .eq("status", "available")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+
+  const rows = (data ?? []) as Array<{ image_urls?: unknown }>;
+  const urls = rows
+    .flatMap((r) => (Array.isArray(r.image_urls) ? r.image_urls : []))
+    .map((u) => String(u ?? "").trim())
+    .filter(Boolean);
+
+  // de-dupe while preserving order
+  return Array.from(new Set(urls));
+};
+
 export const getFoundItem = async (itemId: string): Promise<FoundItemRow> => {
   const { data, error } = await supabase
     .from("found_items")
@@ -333,7 +395,13 @@ export const updateFoundItem = async (
     .single();
 
   if (error) throw error;
-  return data as FoundItemRow;
+  const updated = data as FoundItemRow;
+
+  void requestAdminPotentialMatchUpdate(itemId).catch((err) =>
+    console.error("updateFoundItem: match update failed", err)
+  );
+
+  return updated;
 };
 
 export const deleteFoundItem = async (id: string): Promise<FoundItemRow> => {
@@ -438,7 +506,7 @@ export const createLostItemReport = async (
   return created;
 };
 
-const requestUserPotentialMatchUpdate = async (reportId: string): Promise<void> => {
+export const requestUserPotentialMatchUpdate = async (reportId: string): Promise<void> => {
   const trimmedReportId = String(reportId ?? "").trim();
   if (!trimmedReportId) throw new Error("reportId is required");
 
@@ -1029,7 +1097,7 @@ export const findPotentialMatches = async (lostItemData: Partial<LostItemReportR
   });
 
   return matches
-    .filter((item: any) => item.matchScore >= 0.45)
+    .filter((item: any) => item.matchScore >= 0.65)
     .sort((a: any, b: any) => b.matchScore - a.matchScore)
     .slice(0, 5);
 };
@@ -1166,6 +1234,34 @@ export const uploadImage = async (file: File): Promise<string> => {
   const { data } = supabase.storage.from("item-images").getPublicUrl(fileName);
 
   return data.publicUrl;
+};
+
+// --------------------------------------------
+// REALTIME SUBSCRIPTIONS
+// --------------------------------------------
+
+export const subscribeToMatchChanges = (
+  reportIds: string[],
+  callback: (reportId: string, event: "INSERT" | "UPDATE" | "DELETE") => void
+): (() => void) => {
+  if (reportIds.length === 0) return () => {};
+
+  const channel = supabase
+    .channel(`potential_matches:${reportIds.join(",")}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "potential_matches" },
+      (payload) => {
+        const row = (payload.new ?? payload.old) as { report_id?: string } | null;
+        const reportId = String(row?.report_id ?? "").trim();
+        if (reportId && reportIds.includes(reportId)) {
+          callback(reportId, payload.eventType as "INSERT" | "UPDATE" | "DELETE");
+        }
+      }
+    )
+    .subscribe();
+
+  return () => { void supabase.removeChannel(channel); };
 };
 
 export const deleteImage = async (publicUrl: string): Promise<void> => {
