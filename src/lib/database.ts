@@ -145,7 +145,7 @@ export const getRecentReunitedActivity = async (limit = 12): Promise<RecentReuni
     .limit(limit);
 
   if (error) throw error;
-  return (data ?? []) as RecentReunitedActivity[];
+  return (data ?? []) as unknown as RecentReunitedActivity[];
 };
 
 // --------------------------------------------
