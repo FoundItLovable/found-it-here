@@ -740,6 +740,8 @@ app.post("/api/admin/potential-matches/update", async (req, res) => {
     }
 
     let insertedCount = 0;
+    let rowsToInsert: any[] = [];
+    
     if (scored.length > 0) {
       const candidateRows = scored.map((row) => ({
         report_id: String(row.report.id),
@@ -754,7 +756,7 @@ app.post("/api/admin/potential-matches/update", async (req, res) => {
       );
 
       const reportIds = uniqueRows.map((row) => row.report_id);
-      let rowsToInsert = uniqueRows;
+      rowsToInsert = uniqueRows;
       if (reportIds.length > 0) {
         const { data: existingPairs, error: existingPairsError } = await serverSupabase
           .from("potential_matches")
@@ -795,6 +797,62 @@ app.post("/api/admin/potential-matches/update", async (req, res) => {
       }
       insertedCount = (insertedRows ?? []).length;
     }
+
+    // After the insertion block, where insertedCount is set
+
+if (insertedCount > 0) {
+  // Import email service
+  const EmailService = (await import("./email")).default;
+  const emailService = EmailService.getInstance();
+
+  // Loop through the inserted rows (rowsToInsert corresponds to insertedRows)
+  for (let i = 0; i < insertedCount; i++) {
+    const insertedRow = rowsToInsert[i];  // Get the inserted match data
+    const row = scored.find(s => s.report.id === insertedRow.report_id);  // Find the scored data
+    if (!row) continue;
+
+    try {
+      // Get user details for the lost item
+      const { data: lostReport } = await serverSupabase
+        .from('lost_item_reports')
+        .select('student_id, item_name, category')
+        .eq('id', row.report.id)
+        .single();
+
+      if (!lostReport) continue;
+
+      const { data: userProfile } = await serverSupabase
+        .from('profiles')
+        .select('email, full_name, email_notifications_enabled')
+        .eq('id', lostReport.student_id)
+        .single();
+
+      if (!userProfile || userProfile.email_notifications_enabled === false) continue;
+
+      // Generate email template
+      const dashboardUrl = buildPublicAppUrl(req) + '/dashboard';
+      const template = EmailService.generateMatchFoundTemplate(
+        userProfile.full_name || 'User',
+        lostReport.item_name || 'Item',
+        foundItem.item_name || 'Found Item',
+        row.matchScore,
+        dashboardUrl
+      );
+
+      // Send the email
+      await emailService.sendEmail(userProfile.email, template, {
+        userId: lostReport.student_id,
+        reportId: row.report.id,
+        foundItemId,
+        alertType: 'match_found'
+      });
+
+    } catch (emailError) {
+      console.error('Failed to send match email:', emailError);
+      // Continue with other emails even if one fails
+    }
+  }
+}
 
     console.log("[admin potential matches] update complete", {
       callerId,
@@ -1295,10 +1353,309 @@ app.get("/", (_req, res) => {
   );
 });
 
+// Email notification endpoint - sends confirmation email when lost item is reported
+app.post("/api/notifications/email", async (req, res) => {
+  try {
+    if (!serverSupabase) {
+      console.error("Supabase not configured");
+      return res.status(500).json({ error: "Email service unavailable" });
+    }
+
+    const { type, userId, reportId, itemName, category } = req.body;
+
+    if (!type || !userId || !itemName) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Get user email from profiles
+    const { data: profile, error: profileError } = await serverSupabase
+      .from("profiles")
+      .select("email, full_name, email_notifications_enabled")
+      .eq("id", userId)
+      .single();
+
+    if (profileError || !profile) {
+      console.error("Failed to fetch user profile:", profileError);
+      return res.status(400).json({ error: "User not found" });
+    }
+
+    // Check if user has email notifications enabled
+    if (profile.email_notifications_enabled === false) {
+      return res.status(200).json({ message: "User has disabled email notifications" });
+    }
+
+    const userEmail = profile.email;
+    const userName = profile.full_name || "User";
+
+    // Import email service
+    const EmailService = (await import("./email")).default;
+    const emailService = EmailService.getInstance();
+
+    let template;
+    if (type === "lost_item_submitted") {
+      template = EmailService.generateLostItemSubmittedTemplate(userName, itemName, category || "Item");
+    } else {
+      return res.status(400).json({ error: "Unknown email type" });
+    }
+
+    const success = await emailService.sendEmail(userEmail, template, {
+      userId,
+      reportId,
+      alertType: type,
+    });
+
+    if (!success) {
+      return res.status(500).json({ error: "Failed to send email" });
+    }
+
+    res.json({ success: true, message: "Email sent" });
+  } catch (err: unknown) {
+    console.error("Email notification error:", err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+  }
+});
+
+// Match found notification endpoint - sends email when matching items are found
+app.post("/api/notifications/match-found", async (req, res) => {
+  try {
+    if (!serverSupabase) {
+      console.error("Supabase not configured");
+      return res.status(500).json({ error: "Email service unavailable" });
+    }
+
+    const { foundItemId, foundItemName } = req.body;
+
+    if (!foundItemId || !foundItemName) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Get all potential matches for this found item
+    const { data: matches, error: matchError } = await serverSupabase
+      .from("potential_matches")
+      .select("report_id, lost_item_id")
+      .eq("lost_item_id", foundItemId);
+
+    if (matchError) {
+      console.error("Failed to fetch potential matches:", matchError);
+      return res.status(500).json({ error: "Failed to fetch matches" });
+    }
+
+    if (!matches || matches.length === 0) {
+      return res.json({ success: true, message: "No matches found" });
+    }
+
+    // Group matches by user
+    const userMatches = new Map<string, any[]>();
+
+    for (const match of matches) {
+      // Get lost item report to find the user
+      const { data: report, error: reportError } = await serverSupabase
+        .from("lost_item_reports")
+        .select("id, student_id, item_name, category")
+        .eq("id", match.report_id)
+        .single();
+
+      if (reportError || !report) {
+        console.error("Failed to fetch report:", reportError);
+        continue;
+      }
+
+      if (!userMatches.has(report.student_id)) {
+        userMatches.set(report.student_id, []);
+      }
+      userMatches.get(report.student_id)!.push(report);
+    }
+
+    // Send emails to each user
+    const EmailService = (await import("./email")).default;
+    const emailService = EmailService.getInstance();
+
+    let successCount = 0;
+    for (const [userId, userReports] of userMatches) {
+      // Get user profile
+      const { data: profile, error: profileError } = await serverSupabase
+        .from("profiles")
+        .select("email, full_name, email_notifications_enabled")
+        .eq("id", userId)
+        .single();
+
+      if (profileError || !profile) {
+        console.error("Failed to fetch user profile:", profileError);
+        continue;
+      }
+
+      // Check if user has email notifications enabled
+      if (profile.email_notifications_enabled === false) {
+        continue;
+      }
+
+      const userEmail = profile.email;
+      const userName = profile.full_name || "User";
+
+      // Send match found email
+      const dashboardUrl = `${process.env.VITE_APP_URL || "http://localhost:5173"}/dashboard`;
+
+      let template;
+      if (userReports.length === 1) {
+        const report = userReports[0];
+        const matchScore = 0.75; // Default score, could be fetched from potential_matches if stored
+        template = EmailService.generateMatchFoundTemplate(
+          userName,
+          String(report.item_name || "Your item"),
+          foundItemName,
+          matchScore,
+          dashboardUrl
+        );
+      } else {
+        template = EmailService.generateMatchesFoundBatchTemplate(
+          userName,
+          userReports.length,
+          dashboardUrl
+        );
+      }
+
+      const success = await emailService.sendEmail(userEmail, template, {
+        userId,
+        foundItemId,
+        alertType: "match_found",
+      });
+
+      if (success) {
+        successCount++;
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Sent match notifications to ${successCount} user(s)`,
+      userCount: userMatches.size,
+    });
+  } catch (err: unknown) {
+    console.error("Match found notification error:", err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+  }
+});
+
+// Endpoint to get user's email notification preferences
+app.get("/api/user/email-preferences", async (req, res) => {
+  try {
+    if (!serverSupabase) {
+      return res.status(500).json({ error: "Service unavailable" });
+    }
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.slice(7);
+    const { data: userData, error: userError } = await serverSupabase.auth.getUser(token);
+
+    if (userError || !userData.user) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const { data: profile, error: profileError } = await serverSupabase
+      .from("profiles")
+      .select("email_notifications_enabled")
+      .eq("id", userData.user.id)
+      .single();
+
+    if (profileError) {
+      return res.status(400).json({ error: "User not found" });
+    }
+
+    res.json({
+      email_notifications_enabled: profile.email_notifications_enabled !== false,
+    });
+  } catch (err: unknown) {
+    console.error("Get email preferences error:", err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+  }
+});
+
+// Endpoint to update user's email notification preferences
+app.post("/api/user/email-preferences", async (req, res) => {
+  try {
+    if (!serverSupabase) {
+      return res.status(500).json({ error: "Service unavailable" });
+    }
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.slice(7);
+    const { data: userData, error: userError } = await serverSupabase.auth.getUser(token);
+
+    if (userError || !userData.user) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const { email_notifications_enabled } = req.body;
+
+    if (typeof email_notifications_enabled !== "boolean") {
+      return res.status(400).json({ error: "Invalid request body" });
+    }
+
+    const { error: updateError } = await serverSupabase
+      .from("profiles")
+      .update({ email_notifications_enabled })
+      .eq("id", userData.user.id);
+
+    if (updateError) {
+      return res.status(400).json({ error: "Failed to update preferences" });
+    }
+
+    res.json({ success: true, email_notifications_enabled });
+  } catch (err: unknown) {
+    console.error("Update email preferences error:", err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+  }
+});
+
+// Endpoint to get user's email alert history
+app.get("/api/user/email-alerts", async (req, res) => {
+  try {
+    if (!serverSupabase) {
+      return res.status(500).json({ error: "Service unavailable" });
+    }
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const token = authHeader.slice(7);
+    const { data: userData, error: userError } = await serverSupabase.auth.getUser(token);
+
+    if (userError || !userData.user) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const { data: alerts, error: alertError } = await serverSupabase
+      .from("email_alerts")
+      .select("*")
+      .eq("user_id", userData.user.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (alertError) {
+      return res.status(400).json({ error: "Failed to fetch alerts" });
+    }
+
+    res.json({ alerts });
+  } catch (err: unknown) {
+    console.error("Get email alerts error:", err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+  }
+});
+
 // Custom 404 so we can tell when the server legitimately didn't match a route
-app.use((req, res) => {
-  console.log("No matching route for:", req.method, req.url);
-  res.status(404).send(`No route for ${req.method} ${req.url}`);
+app.use((_req, res) => {
+  console.log("No matching route for:", _req.method, _req.url);
+  res.status(404).send(`No route for ${_req.method} ${_req.url}`);
 });
 
 // server = app.listen(5050, () => {
