@@ -16,7 +16,7 @@ import { toast } from "@/hooks/use-toast";
 import { Logo } from "@/components/Logo";
 import { useLogoDestination } from "@/hooks/useLogoDestination";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Mail, Lock, User, Phone, IdCard } from "lucide-react";
+import { Mail, Lock, User, Phone, IdCard, ArrowLeft } from "lucide-react";
 
 const signupSchema = z.object({
   fullName: z.string().min(2, "Name must be at least 2 characters"),
@@ -131,7 +131,12 @@ export default function Signup() {
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
       </div>
 
-      <Card className="w-full max-w-md glass-card relative z-10">
+      <Card className="relative z-10 w-full max-w-md glass-card">
+        <Link to="/" className="absolute left-4 top-4 z-10">
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </Link>
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
             <Logo to={logoTo} />

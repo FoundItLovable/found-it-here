@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
-import { animate, motion, useMotionValue } from "framer-motion";
-import { useEffect, useState } from "react";
+import { motion, useAnimationFrame, useMotionValue } from "framer-motion";
+import { useEffect, useMemo, useRef } from "react";
 import useMeasure from "react-use-measure";
 
 type InfiniteSliderProps = {
@@ -8,6 +8,10 @@ type InfiniteSliderProps = {
   gap?: number;
   speed?: number;
   speedOnHover?: number;
+  /** Optional: total seconds for one full loop */
+  loopDurationSeconds?: number;
+  /** Optional hover slowdown multiplier when speedOnHover is not provided (e.g. 0.5) */
+  hoverSlowdownFactor?: number;
   direction?: "horizontal" | "vertical";
   reverse?: boolean;
   className?: string;
@@ -18,60 +22,82 @@ export function InfiniteSlider({
   gap = 16,
   speed = 80,
   speedOnHover,
+  loopDurationSeconds,
+  hoverSlowdownFactor,
   direction = "horizontal",
   reverse = false,
   className,
 }: InfiniteSliderProps) {
-  const [currentSpeed, setCurrentSpeed] = useState(speed);
-  const [ref, bounds] = useMeasure();
+  const [ref] = useMeasure();
+  const [segmentRef, segmentBounds] = useMeasure();
   const translation = useMotionValue(0);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const [key, setKey] = useState(0);
+  const currentSpeedRef = useRef(speed);
+  const restSpeedRef = useRef(speed);
+  const hoverSpeedRef = useRef<number | undefined>(undefined);
+  const isHoveredRef = useRef(false);
+  const phaseRef = useRef(0);
+
+  const segmentSize = direction === "horizontal" ? segmentBounds.width : segmentBounds.height;
+  const loopDistance = segmentSize + gap;
+
+  const baseSpeed = useMemo(
+    () =>
+      loopDurationSeconds && loopDurationSeconds > 0 && loopDistance > 0
+        ? loopDistance / loopDurationSeconds
+        : speed,
+    [loopDurationSeconds, loopDistance, speed]
+  );
+
+  const hoverSpeed = useMemo(
+    () =>
+      speedOnHover ??
+      (hoverSlowdownFactor && hoverSlowdownFactor > 0
+        ? baseSpeed * hoverSlowdownFactor
+        : undefined),
+    [speedOnHover, hoverSlowdownFactor, baseSpeed]
+  );
 
   useEffect(() => {
-    const size = direction === "horizontal" ? bounds.width : bounds.height;
-    if (!size) return;
+    if (!loopDistance) return;
+    // Preserve phase when size recalculates (e.g. image decode, responsive layout)
+    // to avoid visible jumps/stutters over long runs.
+    phaseRef.current = ((phaseRef.current % loopDistance) + loopDistance) % loopDistance;
+    translation.set(reverse ? -loopDistance + phaseRef.current : -phaseRef.current);
+    currentSpeedRef.current = baseSpeed;
+    restSpeedRef.current = baseSpeed;
+    hoverSpeedRef.current = hoverSpeed;
+  }, [loopDistance, reverse, baseSpeed, hoverSpeed, translation]);
 
-    const contentSize = size + gap;
-    const from = reverse ? -contentSize / 2 : 0;
-    const to = reverse ? 0 : -contentSize / 2;
+  useAnimationFrame((_, delta) => {
+    if (!loopDistance || delta <= 0) return;
 
-    let controls: ReturnType<typeof animate> | undefined;
+    const cappedDeltaMs = Math.min(delta, 50);
+    const targetSpeed =
+      isHoveredRef.current && hoverSpeedRef.current != null
+        ? hoverSpeedRef.current
+        : restSpeedRef.current;
+    const current = currentSpeedRef.current;
+    // Smoothly approach target speed to avoid visible speed pops.
+    const blend = 1 - Math.exp(-cappedDeltaMs / 140);
+    const nextSpeed = current + (targetSpeed - current) * blend;
+    currentSpeedRef.current = nextSpeed;
 
-    if (isTransitioning) {
-      controls = animate(translation, [translation.get(), to], {
-        ease: "linear",
-        duration: (contentSize / currentSpeed) * Math.abs((translation.get() - to) / contentSize),
-        onComplete: () => {
-          setIsTransitioning(false);
-          setKey((prevKey) => prevKey + 1);
-        },
-      });
-    } else {
-      controls = animate(translation, [from, to], {
-        ease: "linear",
-        duration: contentSize / currentSpeed,
-        repeat: Infinity,
-        repeatType: "loop",
-        repeatDelay: 0,
-        onRepeat: () => {
-          translation.set(from);
-        },
-      });
-    }
+    phaseRef.current = (phaseRef.current + nextSpeed * (cappedDeltaMs / 1000)) % loopDistance;
+    const next = reverse ? -loopDistance + phaseRef.current : -phaseRef.current;
+    translation.set(next);
+  });
 
-    return () => controls?.stop();
-  }, [key, translation, currentSpeed, bounds.width, bounds.height, gap, isTransitioning, direction, reverse]);
-
-  const hoverProps = speedOnHover
+  const hoverProps = speedOnHover || hoverSlowdownFactor
     ? {
         onHoverStart: () => {
-          setIsTransitioning(true);
-          setCurrentSpeed(speedOnHover);
+          restSpeedRef.current = baseSpeed;
+          hoverSpeedRef.current = hoverSpeed;
+          isHoveredRef.current = true;
         },
         onHoverEnd: () => {
-          setIsTransitioning(true);
-          setCurrentSpeed(speed);
+          isHoveredRef.current = false;
+          // Explicitly restore baseline speed so hover never leaves a faster default.
+          currentSpeedRef.current = restSpeedRef.current;
         },
       }
     : {};
@@ -79,7 +105,7 @@ export function InfiniteSlider({
   return (
     <div className={cn("overflow-hidden", className)}>
       <motion.div
-        className="flex w-max"
+        className="flex w-max will-change-transform"
         style={{
           ...(direction === "horizontal" ? { x: translation } : { y: translation }),
           gap: `${gap}px`,
@@ -88,10 +114,20 @@ export function InfiniteSlider({
         ref={ref}
         {...hoverProps}
       >
-        {children}
-        {children}
+        <div
+          ref={segmentRef}
+          className="flex w-max"
+          style={{ gap: `${gap}px`, flexDirection: direction === "horizontal" ? "row" : "column" }}
+        >
+          {children}
+        </div>
+        <div
+          className="flex w-max"
+          style={{ gap: `${gap}px`, flexDirection: direction === "horizontal" ? "row" : "column" }}
+        >
+          {children}
+        </div>
       </motion.div>
     </div>
   );
 }
-
