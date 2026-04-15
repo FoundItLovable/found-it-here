@@ -18,7 +18,7 @@ import { toast } from "@/hooks/use-toast";
 import { Logo } from "@/components/Logo";
 import { useLogoDestination } from "@/hooks/useLogoDestination";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Mail, Lock } from "lucide-react";
+import { Mail, Lock, ArrowLeft } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -123,9 +123,13 @@ export default function Login() {
       <div className="absolute top-4 right-4 md:top-6 md:right-6 z-20">
         <ThemeToggle />
       </div>
-
       <div className="relative z-10 w-full flex flex-col items-center justify-center p-4 md:p-8 min-h-screen overflow-y-auto">
-        <Card className="w-full max-w-md glass-card shadow-2xl animate-fade-in bg-card/95 backdrop-blur-xl">
+        <Card className="relative w-full max-w-md glass-card shadow-2xl animate-fade-in bg-card/95 backdrop-blur-xl">
+          <Link to="/" className="absolute left-4 top-4 z-10">
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
           <CardHeader className="text-center space-y-4 pb-2">
             <div className="flex justify-center">
               <Logo to={logoTo} />

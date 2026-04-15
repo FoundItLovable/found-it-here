@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { useTheme } from "next-themes";
 
 import { cn } from "@/lib/utils";
+import { InfiniteSlider } from "@/components/ui/infinite-slider";
 
 type ImageAutoSliderProps = {
   className?: string;
@@ -29,7 +30,7 @@ const DEFAULT_IMAGES: string[] = [
 
 export function ImageAutoSlider({
   className,
-  durationSeconds = 28,
+  durationSeconds = 26,
   images,
 }: ImageAutoSliderProps) {
   const { resolvedTheme } = useTheme();
@@ -40,10 +41,8 @@ export function ImageAutoSlider({
     const merged = extras.length ? [...DEFAULT_IMAGES, ...extras] : DEFAULT_IMAGES;
     return Array.from(new Set(merged));
   }, [images]);
-  const duplicated = useMemo(() => [...base, ...base], [base]);
-
-  const [isHoverSlow, setIsHoverSlow] = useState(false);
-  const slowDurationSeconds = durationSeconds * 2.6;
+  const secondsPerItem = 2.73;
+  const loopDurationSeconds = Math.max(base.length * secondsPerItem, durationSeconds);
 
   return (
     <div
@@ -53,18 +52,7 @@ export function ImageAutoSlider({
         "backdrop-blur-xl",
         className,
       )}
-      onMouseEnter={() => setIsHoverSlow(true)}
-      onMouseLeave={() => setIsHoverSlow(false)}
-      onTouchStart={() => setIsHoverSlow(true)}
-      onTouchEnd={() => setIsHoverSlow(false)}
     >
-      <style>{`
-        @keyframes foundit-scroll-right {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-      `}</style>
-
       {/* Soft gradients for depth */}
       <div
         aria-hidden
@@ -84,15 +72,8 @@ export function ImageAutoSlider({
           "[-webkit-mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]",
         )}
       >
-        <div
-          className="flex gap-6 w-max"
-          style={{
-            animation: `foundit-scroll-right ${
-              isHoverSlow ? slowDurationSeconds : durationSeconds
-            }s linear infinite`,
-          }}
-        >
-          {duplicated.map((src, index) => (
+        <InfiniteSlider gap={24} loopDurationSeconds={loopDurationSeconds} hoverSlowdownFactor={0.45}>
+          {base.map((src, index) => (
             <div
               key={`${index}-${src}`}
               className={cn(
@@ -119,7 +100,7 @@ export function ImageAutoSlider({
               />
             </div>
           ))}
-        </div>
+        </InfiniteSlider>
       </div>
 
       <div

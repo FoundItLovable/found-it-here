@@ -55,8 +55,15 @@ export function FeatureSteps({
       if (Math.abs(e.deltaY) < 2) return;
 
       const rect = el.getBoundingClientRect();
-      const mostlyVisible = rect.top < window.innerHeight * 0.8 && rect.bottom > window.innerHeight * 0.2;
-      if (!mostlyVisible) return;
+      const inViewport = rect.top < window.innerHeight && rect.bottom > 0;
+      if (!inViewport) return;
+
+      // Direction-aware edge locking:
+      // - Scrolling down: start stepping only after section top reaches viewport top.
+      // - Scrolling up: start stepping only after section bottom reaches viewport bottom.
+      const EDGE_TOLERANCE_PX = 20;
+      if (e.deltaY > 0 && rect.top > EDGE_TOLERANCE_PX) return;
+      if (e.deltaY < 0 && rect.bottom < window.innerHeight - EDGE_TOLERANCE_PX) return;
 
       const now = Date.now();
       const STEP_COOLDOWN_MS = 320;
