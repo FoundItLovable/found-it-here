@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Search, Package, MapPin, Clock, LogIn, LogOut, ChevronRight, X, Loader2, Trash2, CheckCircle2, Calendar, User, Navigation } from 'lucide-react';
+import { Search, Package, MapPin, Clock, LogIn, LogOut, ChevronRight, X, Loader2, Trash2, CheckCircle2, Calendar, Navigation } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Link, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -657,12 +657,6 @@ export default function UserDashboard() {
                     <Calendar className="w-4 h-4 text-primary" />
                     <span>Found {new Date(selectedMatch.foundItem.dateFound).toLocaleDateString()}</span>
                   </div>
-                  {selectedMatch.foundItem.checkedInBy && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <User className="w-4 h-4 text-primary" />
-                      <span>Checked in by {selectedMatch.foundItem.checkedInBy}</span>
-                    </div>
-                  )}
                 </div>
                 <div className="flex gap-2 pt-2">
                   <DirectionsDropdown

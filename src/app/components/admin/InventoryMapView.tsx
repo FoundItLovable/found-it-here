@@ -116,9 +116,9 @@ export function InventoryMapView({
   }
 
   return (
-    <div className="flex min-w-0 flex-col lg:flex-row lg:flex-nowrap gap-0 rounded-xl overflow-hidden border border-border/50 bg-card shadow-sm h-[calc(100vh-320px)] min-h-[480px]">
+    <div className="flex min-h-0 min-w-0 flex-col lg:flex-row lg:flex-nowrap gap-0 rounded-xl overflow-hidden border border-border/50 bg-card shadow-sm h-[calc(100vh-320px)] min-h-[480px]">
       {/* Map - 60% on desktop */}
-      <div className="w-full min-w-0 h-64 lg:h-full lg:flex-none lg:basis-[60%] lg:max-w-[60%] relative">
+      <div className="relative w-full min-w-0 h-64 lg:h-full lg:flex-none lg:basis-[60%] lg:max-w-[60%]">
         <MapContainer
           center={DEFAULT_CENTER}
           zoom={DEFAULT_ZOOM}
@@ -154,13 +154,13 @@ export function InventoryMapView({
       </div>
 
       {/* List - 40% on desktop */}
-      <div className="w-full min-w-0 overflow-hidden flex flex-col border-t lg:border-t-0 lg:border-l border-border/50 bg-background lg:flex-none lg:basis-[40%] lg:max-w-[40%]">
+      <div className="flex min-h-0 w-full min-w-0 overflow-hidden flex-col border-t lg:border-t-0 lg:border-l border-border/50 bg-background lg:flex-none lg:basis-[40%] lg:max-w-[40%]">
         <div className="px-4 py-3 border-b border-border/50">
           <p className="text-sm text-muted-foreground">
             {displayList.length} item{displayList.length !== 1 ? 's' : ''} in view
           </p>
         </div>
-        <ScrollArea className="flex-1 min-w-0 overflow-x-hidden">
+        <ScrollArea className="min-h-0 flex-1 min-w-0 overflow-x-hidden">
           <div className="w-full min-w-0 p-4 space-y-3">
             {displayList.map((item) => (
               <div

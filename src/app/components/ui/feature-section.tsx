@@ -32,6 +32,9 @@ export function FeatureSteps({
   const [currentFeature, setCurrentFeature] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isInteracting, setIsInteracting] = useState(false);
+  const wheelDeltaAccumRef = useRef(0);
+  const lastWheelStepAtRef = useRef(0);
+  const interactionTimeoutRef = useRef<number | null>(null);
 
   const safeFeatures = useMemo(() => features.filter((f) => f?.content && f?.image), [features]);
 
@@ -48,27 +51,48 @@ export function FeatureSteps({
     if (!el || safeFeatures.length === 0) return;
 
     const onWheel = (e: WheelEvent) => {
-      // Scroll to change step, but don't trap the page.
-      if (Math.abs(e.deltaY) < 8) return;
+      // Let the page scroll naturally; only use wheel as a paced step signal.
+      if (Math.abs(e.deltaY) < 2) return;
 
       const rect = el.getBoundingClientRect();
-      const centerInView = rect.top < window.innerHeight * 0.55 && rect.bottom > window.innerHeight * 0.45;
-      if (!centerInView) return;
+      const mostlyVisible = rect.top < window.innerHeight * 0.8 && rect.bottom > window.innerHeight * 0.2;
+      if (!mostlyVisible) return;
 
-      // Prevent accidental rapid-fire changes.
-      e.preventDefault();
-      setIsInteracting(true);
+      const now = Date.now();
+      const STEP_COOLDOWN_MS = 320;
+      const STEP_THRESHOLD = 110;
+
+      wheelDeltaAccumRef.current += e.deltaY;
+
+      if (now - lastWheelStepAtRef.current < STEP_COOLDOWN_MS) return;
+
+      const canAdvanceDown = wheelDeltaAccumRef.current >= STEP_THRESHOLD;
+      const canAdvanceUp = wheelDeltaAccumRef.current <= -STEP_THRESHOLD;
+      if (!canAdvanceDown && !canAdvanceUp) return;
+
       setCurrentFeature((prev) => {
-        const dir = e.deltaY > 0 ? 1 : -1;
-        const next = (prev + dir + safeFeatures.length) % safeFeatures.length;
-        return next;
+        if (canAdvanceDown) return Math.min(prev + 1, safeFeatures.length - 1);
+        return Math.max(prev - 1, 0);
       });
-      window.setTimeout(() => setIsInteracting(false), 800);
+
+      lastWheelStepAtRef.current = now;
+      wheelDeltaAccumRef.current = 0;
+      setIsInteracting(true);
+      if (interactionTimeoutRef.current) window.clearTimeout(interactionTimeoutRef.current);
+      interactionTimeoutRef.current = window.setTimeout(() => {
+        setIsInteracting(false);
+        interactionTimeoutRef.current = null;
+      }, 650);
     };
 
-    // Only intercept wheel when the section is centered.
-    window.addEventListener("wheel", onWheel, { passive: false });
-    return () => window.removeEventListener("wheel", onWheel as any);
+    window.addEventListener("wheel", onWheel, { passive: true });
+    return () => {
+      window.removeEventListener("wheel", onWheel as any);
+      if (interactionTimeoutRef.current) {
+        window.clearTimeout(interactionTimeoutRef.current);
+        interactionTimeoutRef.current = null;
+      }
+    };
   }, [safeFeatures.length]);
 
   if (safeFeatures.length === 0) return null;
@@ -187,4 +211,3 @@ export function FeatureSteps({
     </div>
   );
 }
-

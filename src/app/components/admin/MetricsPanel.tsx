@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { TrendingUp, Clock, Package, AlertTriangle, Target, ArrowUpDown } from 'lucide-react';
+import { TrendingUp, Clock, Package, AlertTriangle, ArrowUpDown } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -13,12 +13,9 @@ import {
 import { Button } from '@/components/ui/button';
 import type { FoundItem, ItemCategory } from '@/types';
 import { categoryLabels } from '@/types';
-import type { ClaimRow, LostItemReportRow } from '../../../lib/database';
 
 interface MetricsPanelProps {
   items: FoundItem[];
-  claims: ClaimRow[];
-  lostReports: LostItemReportRow[];
 }
 
 /** Format a duration in milliseconds with smart units:
@@ -33,7 +30,7 @@ function formatDuration(ms: number): string {
   return `${Math.round(days * 10) / 10}d`;
 }
 
-export function MetricsPanel({ items, claims, lostReports }: MetricsPanelProps) {
+export function MetricsPanel({ items }: MetricsPanelProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [chartSortDir, setChartSortDir] = useState<'desc' | 'asc'>('desc');
 
@@ -50,20 +47,6 @@ export function MetricsPanel({ items, claims, lostReports }: MetricsPanelProps) 
         ? items
         : items.filter((i) => (i.category || 'other') === selectedCategory),
     [items, selectedCategory],
-  );
-
-  // Claims matching filtered items
-  const filteredItemIds = useMemo(
-    () => new Set(filteredItems.map((i) => i.id)),
-    [filteredItems],
-  );
-
-  const filteredClaims = useMemo(
-    () =>
-      selectedCategory === 'all'
-        ? claims
-        : claims.filter((c) => filteredItemIds.has(c.found_item_id)),
-    [claims, selectedCategory, filteredItemIds],
   );
 
   // ── Metric 1: Recovery Rate ──────────────────────────────────────────────
@@ -105,17 +88,6 @@ export function MetricsPanel({ items, claims, lostReports }: MetricsPanelProps) 
       avgAgeDays: Math.round(totalAge / available.length),
     };
   }, [filteredItems]);
-
-  // ── Metric 4: Match Rate ─────────────────────────────────────────────────
-  const matchRate = useMemo(() => {
-    const scopedReports =
-      selectedCategory === 'all'
-        ? lostReports
-        : lostReports.filter((r) => (r.category || 'other') === selectedCategory);
-    if (scopedReports.length === 0) return 0;
-    const approved = filteredClaims.filter((c) => c.review_status === 'approved').length;
-    return Math.round((approved / scopedReports.length) * 100);
-  }, [filteredClaims, lostReports, selectedCategory]);
 
   // ── Category chart data ──────────────────────────────────────────────────
   const categoryData = useMemo(() => {
@@ -169,8 +141,8 @@ export function MetricsPanel({ items, claims, lostReports }: MetricsPanelProps) 
         )}
       </div>
 
-      {/* Top row: 4 metric cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Top row: 3 metric cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Recovery Rate */}
         <Card>
           <CardContent className="p-4">
@@ -229,23 +201,6 @@ export function MetricsPanel({ items, claims, lostReports }: MetricsPanelProps) 
           </CardContent>
         </Card>
 
-        {/* Match Rate */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-500/15">
-                <Target className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{matchRate}%</p>
-                <p className="text-xs text-muted-foreground">Match Rate</p>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Lost reports matched to found items
-            </p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Category Chart */}
