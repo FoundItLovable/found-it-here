@@ -6,13 +6,10 @@ import { getCurrentUserWithProfile, isStaff, signOut } from "../../lib/auth";
 import { useAuthState } from "@/hooks/useAuthState";
 import {
   getOfficeFoundItems,
-  getOfficeClaims,
-  getAllLostReports,
   updateFoundItem,
   createFoundItem,
 } from "../../lib/database";
 import { supabase } from "../../lib/supabase";
-import type { ClaimRow, LostItemReportRow } from "../../lib/database";
 
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -27,7 +24,7 @@ import { toast } from "@/hooks/use-toast";
 import {
   Search, Package, Plus, ArrowLeft, Grid3X3, BarChart3,
   ListFilter, CheckCircle, XCircle, Clock,
-  MapPin, Calendar, User, Map, LayoutGrid
+  MapPin, Calendar, Map, LayoutGrid
 } from 'lucide-react';
 
 import { Button } from "@/components/ui/button";
@@ -91,8 +88,6 @@ export default function AdminDashboard() {
   const { user: authUser, loading: authLoading } = useAuthState();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<FoundItem[]>([]);
-  const [claims, setClaims] = useState<ClaimRow[]>([]);
-  const [lostReports, setLostReports] = useState<LostItemReportRow[]>([]);
   const [currentOffice, setCurrentOffice] = useState({ name: "" });
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -149,17 +144,11 @@ export default function AdminDashboard() {
         if (!staffId) throw new Error("Missing staff id");
         const officeId = String(userWithProfile?.profile?.office_id ?? "");
 
-        const [rows, claimsData, reportsData] = await Promise.all([
-          getOfficeFoundItems(officeId, 200, 0),
-          getOfficeClaims(officeId, 500, 0),
-          getAllLostReports(),
-        ]);
+        const rows = await getOfficeFoundItems(officeId, 200, 0);
         if (!mounted) return;
 
         const normalized = (rows ?? []).map((r: any) => rowToFoundItem(r, userWithProfile.profile));
         setItems(normalized);
-        setClaims((claimsData ?? []) as ClaimRow[]);
-        setLostReports((reportsData ?? []) as LostItemReportRow[]);
         setCurrentOffice({ name: userWithProfile.profile?.office?.office_name ?? "Office" });
         setStaffContext({ staffId: String(staffId), officeId });
       } catch (err: any) {
@@ -183,9 +172,8 @@ export default function AdminDashboard() {
   const stats = useMemo(() => {
     const total = items.length;
     const available = items.filter((i) => i.status === "available").length;
-    const claimed = items.filter((i) => i.status === "claimed").length;
     const returned = items.filter((i) => i.status === "returned").length;
-    return { total, available, claimed, returned };
+    return { total, available, returned };
   }, [items]);
 
   const filteredItems = useMemo(() => {
@@ -469,7 +457,7 @@ export default function AdminDashboard() {
       {/* Stats Banner */}
       <section className="border-b border-border/50 bg-muted/20">
         <div className="container mx-auto px-4 py-4">
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <Card className="border-0 shadow-none bg-transparent">
               <CardContent className="p-3 flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-foreground">
@@ -489,17 +477,6 @@ export default function AdminDashboard() {
                 <div>
                   <p className="text-2xl font-bold text-foreground">{stats.available}</p>
                   <p className="text-xs text-muted-foreground">Available</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-none bg-transparent">
-              <CardContent className="p-3 flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-yellow-500/15">
-                  <User className="w-4 h-4 text-yellow-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">{stats.claimed}</p>
-                  <p className="text-xs text-muted-foreground">Claimed</p>
                 </div>
               </CardContent>
             </Card>
@@ -646,7 +623,7 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="metrics">
-            <MetricsPanel items={items} claims={claims} lostReports={lostReports} />
+            <MetricsPanel items={items} />
           </TabsContent>
 
           {/* Add modal rendered outside the tabs */}
@@ -690,14 +667,10 @@ export default function AdminDashboard() {
                 )}
                 <div className="space-y-3">
                   <p className="text-sm text-foreground">{selectedItem.description}</p>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="grid grid-cols-1 gap-3 text-sm">
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Calendar className="w-4 h-4" />
                       <span>Found: {new Date(selectedItem.dateFound).toLocaleDateString()}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <User className="w-4 h-4" />
-                      <span>By: {selectedItem.checkedInBy}</span>
                     </div>
                   </div>
                   {selectedItem.status === 'available' && (

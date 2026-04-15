@@ -42,7 +42,8 @@ export function ImageAutoSlider({
   }, [images]);
   const duplicated = useMemo(() => [...base, ...base], [base]);
 
-  const [paused, setPaused] = useState(false);
+  const [isHoverSlow, setIsHoverSlow] = useState(false);
+  const slowDurationSeconds = durationSeconds * 2.6;
 
   return (
     <div
@@ -52,10 +53,10 @@ export function ImageAutoSlider({
         "backdrop-blur-xl",
         className,
       )}
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onTouchStart={() => setPaused(true)}
-      onTouchEnd={() => setPaused(false)}
+      onMouseEnter={() => setIsHoverSlow(true)}
+      onMouseLeave={() => setIsHoverSlow(false)}
+      onTouchStart={() => setIsHoverSlow(true)}
+      onTouchEnd={() => setIsHoverSlow(false)}
     >
       <style>{`
         @keyframes foundit-scroll-right {
@@ -86,8 +87,9 @@ export function ImageAutoSlider({
         <div
           className="flex gap-6 w-max"
           style={{
-            animation: `foundit-scroll-right ${durationSeconds}s linear infinite`,
-            animationPlayState: paused ? "paused" : "running",
+            animation: `foundit-scroll-right ${
+              isHoverSlow ? slowDurationSeconds : durationSeconds
+            }s linear infinite`,
           }}
         >
           {duplicated.map((src, index) => (
@@ -130,4 +132,3 @@ export function ImageAutoSlider({
     </div>
   );
 }
-

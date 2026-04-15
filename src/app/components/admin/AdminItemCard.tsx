@@ -30,10 +30,10 @@ export function AdminItemCard({ item, onEdit, onClose, onCancel, onView, onToggl
   const badgeClass = statusStyles[item.status] ?? statusStyles.available;
 
   return (
-    <Card className="w-full max-w-full overflow-hidden rounded-xl border-0 bg-card shadow-[0_2px_12px_rgba(0,0,0,0.06)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-200 ease-out group">
+    <Card className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border-0 bg-card shadow-[0_2px_12px_rgba(0,0,0,0.06)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] hover:-translate-y-0.5 transition-all duration-200 ease-out group">
       <CardContent className="p-0">
         {/* Hero image - stretches across top half, edge-to-edge */}
-        <div className={`relative w-full ${compact ? 'aspect-[16/9]' : 'aspect-[4/3]'} bg-muted/50 overflow-hidden`}>
+        <div className={`relative w-full ${compact ? 'aspect-[2/1]' : 'aspect-[4/3]'} bg-muted/50 overflow-hidden`}>
           {item.imageUrl ? (
             <img src={item.imageUrl} alt={item.name} className="block w-full max-w-full h-full object-cover" />
           ) : (
@@ -44,14 +44,14 @@ export function AdminItemCard({ item, onEdit, onClose, onCancel, onView, onToggl
         </div>
 
         {/* Content */}
-        <div className="p-3 sm:p-4">
+        <div className={`${compact ? 'p-3' : 'p-3 sm:p-4'}`}>
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               <h3 className="font-semibold text-foreground truncate">{item.name}</h3>
-              <p className="text-xs text-muted-foreground truncate mt-0.5">{item.description}</p>
+              {!compact && <p className="text-xs text-muted-foreground truncate mt-0.5">{item.description}</p>}
             </div>
 
-            <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="flex max-w-[48%] flex-wrap items-center justify-end gap-1.5 flex-shrink-0">
               {item.showInPublicCatalog === false && (
                 <Badge variant="secondary" className="text-xs bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">
                   <EyeOff className="w-3 h-3 mr-0.5" />
@@ -64,18 +64,18 @@ export function AdminItemCard({ item, onEdit, onClose, onCancel, onView, onToggl
             </div>
           </div>
 
-          <div className="flex items-center justify-between mt-3">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="mt-3 flex min-w-0 items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <Badge variant="secondary" className="text-xs bg-secondary/80">
                 {categoryLabels[item.category]}
               </Badge>
-              <span className="flex items-center gap-1">
+              <span className="flex min-w-0 items-center gap-1 truncate">
                 <Calendar className="w-3 h-3" />
                 {new Date(item.dateFound).toLocaleDateString()}
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               {item.status === "available" && onToggleCatalogVisibility && (
                 <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                   <span className="text-xs text-muted-foreground hidden sm:inline">Catalog</span>

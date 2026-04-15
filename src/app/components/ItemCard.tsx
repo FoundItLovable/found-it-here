@@ -18,7 +18,7 @@ export function ItemCard({ item, confidence, onViewDetails }: ItemCardProps) {
   };
 
   return (
-    <Card className="group overflow-hidden transition-all duration-300 ease-out hover:shadow-xl hover:-translate-y-1 gradient-card border-border/50">
+    <Card className="group flex h-full flex-col overflow-hidden transition-all duration-300 ease-out hover:shadow-xl hover:-translate-y-1 gradient-card border-border/50">
       <div className="relative aspect-[4/3] overflow-hidden bg-muted">
         {item.imageUrl ? (
           <img
@@ -56,8 +56,8 @@ export function ItemCard({ item, confidence, onViewDetails }: ItemCardProps) {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-3">
-        <p className="text-sm text-muted-foreground line-clamp-2">
+      <CardContent className="flex flex-1 flex-col gap-3">
+        <p className="min-h-[2.5rem] text-sm text-muted-foreground line-clamp-2">
           {item.description}
         </p>
 
@@ -76,7 +76,7 @@ export function ItemCard({ item, confidence, onViewDetails }: ItemCardProps) {
           <Button 
             variant="hero" 
             size="sm" 
-            className="w-full mt-2"
+            className="w-full mt-auto"
             onClick={onViewDetails}
           >
             View Location

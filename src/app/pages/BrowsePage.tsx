@@ -33,7 +33,7 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from '@/components/ui/drawer';
-import { Search, LogOut, MapPin, Calendar, User, Loader2, Menu, SlidersHorizontal } from 'lucide-react';
+import { Search, LogOut, MapPin, Calendar, Loader2, Menu, SlidersHorizontal } from 'lucide-react';
 import { signOut } from '../../lib/auth';
 import { useAuthState } from '@/hooks/useAuthState';
 import {
@@ -569,12 +569,6 @@ export default function BrowsePage() {
                     <Calendar className="w-4 h-4 text-primary" />
                     <span>Found {new Date(selectedItem.dateFound).toLocaleDateString()}</span>
                   </div>
-                  {selectedItem.checkedInBy && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <User className="w-4 h-4 text-primary" />
-                      <span>Checked in by {selectedItem.checkedInBy}</span>
-                    </div>
-                  )}
                 </div>
                 <div className="flex gap-2 pt-2">
                   <DirectionsDropdown
